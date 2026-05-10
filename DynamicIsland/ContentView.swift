@@ -54,6 +54,7 @@ struct ContentView: View {
     @ObservedObject var extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
     @ObservedObject var localSendService = LocalSendService.shared
     @State private var downloadManager = DownloadManager.shared
+    @ObservedObject var shelfState = ShelfStateViewModel.shared
     
     @Default(.enableStatsFeature) var enableStatsFeature
     @Default(.showCpuGraph) var showCpuGraph
@@ -774,6 +775,8 @@ struct ContentView: View {
                               return false
                           case .extensionPayload:
                               return false
+                          case .shelf:
+                              return false
                           }
                       }()
                       let canShowMusicDuringExpansion = !coordinator.expandingView.show
@@ -849,6 +852,9 @@ struct ContentView: View {
                               layout: layout,
                               isHovering: isHovering
                           )
+                      } else if !coordinator.expandingView.show && vm.notchState == .closed && !shelfState.isEmpty && !vm.hideOnClosed && !lockScreenManager.isLocked && !enableMinimalisticUI {
+                          ShelfInlineLiveActivity()
+                              .transition(.opacity.animation(.smooth(duration: 0.25)))
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           DynamicIslandFaceAnimation().animation(.interactiveSpring, value: musicManager.isPlayerIdle)
                       } else if vm.notchState == .open {
@@ -1192,6 +1198,11 @@ struct ContentView: View {
             return .extensionPayload(extensionPayload)
         }
 
+        // Shelf: show file count as lowest-priority secondary
+        if !shelfState.isEmpty && !lockScreenManager.isLocked && !enableMinimalisticUI {
+            return .shelf(count: shelfState.items.count)
+        }
+
         return nil
     }
 
@@ -1212,6 +1223,8 @@ struct ContentView: View {
         case .extensionPayload(let payload):
             let maxWidth = baseWidth + centerBaseWidth * 0.6
             return ExtensionLayoutMetrics.trailingWidth(for: payload, baseWidth: baseWidth, maxWidth: maxWidth)
+        case .shelf:
+            return baseWidth
         }
     }
 
@@ -1314,6 +1327,10 @@ struct ContentView: View {
                         accent: payload.descriptor.accentColor.swiftUIColor,
                         size: badgeSize
                     )
+                case .shelf:
+                    Image(systemName: "tray.and.arrow.down.fill")
+                        .font(.system(size: badgeSize * 0.50, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
             }
             .frame(width: badgeSize, height: badgeSize)
@@ -1372,6 +1389,14 @@ struct ContentView: View {
             spectrumView(forceSpectrum: true, trailingInset: 6)
         case .extensionPayload(let payload):
             ExtensionMusicWingView(payload: payload, notchHeight: notchHeight, trailingWidth: trailingWidth)
+        case .shelf(let count):
+            // File count badge: bold white number, like a minimal pill
+            Text("\(count)")
+                .font(.system(.callout, design: .rounded, weight: .bold))
+                .foregroundStyle(.white)
+                .contentTransition(.numericText(countsDown: false))
+                .animation(.smooth(duration: 0.3), value: count)
+                .frame(alignment: .center)
         case .none:
             spectrumView(
                 forceSpectrum: false,
@@ -2474,6 +2499,7 @@ private enum MusicSecondaryLiveActivity: Equatable {
     case focus(FocusModeType)
     case capsLock(showLabel: Bool)
     case extensionPayload(ExtensionLiveActivityPayload)
+    case shelf(count: Int)
 
     var id: String {
         switch self {
@@ -2489,6 +2515,8 @@ private enum MusicSecondaryLiveActivity: Equatable {
             return showLabel ? "caps-lock-label" : "caps-lock-icon"
         case .extensionPayload(let payload):
             return "extension-\(payload.id)"
+        case .shelf(let count):
+            return "shelf-\(count)"
         }
     }
 }
