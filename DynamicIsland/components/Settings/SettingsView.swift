@@ -731,6 +731,19 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .battery, title: "Show power status notifications", keywords: ["notifications", "power"], highlightID: SettingsTab.battery.highlightID(for: "Show power status notifications")),
             SettingsSearchEntry(tab: .battery, title: "Show power status icons", keywords: ["power icons", "charging icon"], highlightID: SettingsTab.battery.highlightID(for: "Show power status icons")),
             SettingsSearchEntry(tab: .battery, title: "Play low battery alert sound", keywords: ["low battery", "alert", "sound"], highlightID: SettingsTab.battery.highlightID(for: "Play low battery alert sound")),
+            SettingsSearchEntry(tab: .battery, title: "Charging HUD", keywords: ["battery", "charging", "temporary activity"], highlightID: SettingsTab.battery.highlightID(for: "Charging HUD")),
+            SettingsSearchEntry(tab: .battery, title: "Low battery HUD", keywords: ["battery", "low", "temporary activity"], highlightID: SettingsTab.battery.highlightID(for: "Low battery HUD")),
+            SettingsSearchEntry(tab: .battery, title: "Fully charged HUD", keywords: ["battery", "full", "temporary activity"], highlightID: SettingsTab.battery.highlightID(for: "Fully charged HUD")),
+            SettingsSearchEntry(tab: .battery, title: "Charging duration", keywords: ["charging", "duration", "seconds"], highlightID: SettingsTab.battery.highlightID(for: "Charging duration")),
+            SettingsSearchEntry(tab: .battery, title: "Low battery duration", keywords: ["low battery", "duration", "seconds"], highlightID: SettingsTab.battery.highlightID(for: "Low battery duration")),
+            SettingsSearchEntry(tab: .battery, title: "Full battery duration", keywords: ["full battery", "duration", "seconds"], highlightID: SettingsTab.battery.highlightID(for: "Full battery duration")),
+            SettingsSearchEntry(tab: .battery, title: "Test charging HUD", keywords: ["battery", "test", "charging", "preview"], highlightID: nil),
+            SettingsSearchEntry(tab: .battery, title: "Test low battery HUD", keywords: ["battery", "test", "low", "preview"], highlightID: nil),
+            SettingsSearchEntry(tab: .battery, title: "Test full battery HUD", keywords: ["battery", "test", "full", "preview"], highlightID: nil),
+            SettingsSearchEntry(tab: .battery, title: "Low battery style", keywords: ["battery", "style", "compact", "standard"], highlightID: SettingsTab.battery.highlightID(for: "Low battery style")),
+            SettingsSearchEntry(tab: .battery, title: "Low battery threshold", keywords: ["battery", "threshold", "percent"], highlightID: SettingsTab.battery.highlightID(for: "Low battery threshold")),
+            SettingsSearchEntry(tab: .battery, title: "Full battery style", keywords: ["battery", "style", "compact", "standard"], highlightID: SettingsTab.battery.highlightID(for: "Full battery style")),
+            SettingsSearchEntry(tab: .battery, title: "Full charge threshold", keywords: ["battery", "threshold", "full"], highlightID: SettingsTab.battery.highlightID(for: "Full charge threshold")),
 
             // HUDs
             SettingsSearchEntry(tab: .devices, title: "Show Bluetooth device connections", keywords: ["bluetooth", "hud"], highlightID: SettingsTab.devices.highlightID(for: "Show Bluetooth device connections")),
@@ -754,6 +767,10 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .hudAndOSD, title: "Keyboard Backlight OSD", keywords: ["keyboard", "backlight", "osd"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Keyboard Backlight OSD")),
             SettingsSearchEntry(tab: .hudAndOSD, title: "Material", keywords: ["material", "frosted", "liquid", "glass", "solid", "osd"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Material")),
             SettingsSearchEntry(tab: .hudAndOSD, title: "Icon & Progress Color", keywords: ["color", "icon", "white", "black", "gray", "osd"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Icon & Progress Color")),
+            SettingsSearchEntry(tab: .hudAndOSD, title: "Volume step", keywords: ["volume", "step", "percent"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Volume step")),
+            SettingsSearchEntry(tab: .hudAndOSD, title: "Volume fine step", keywords: ["volume", "fine", "step", "percent"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Volume fine step")),
+            SettingsSearchEntry(tab: .hudAndOSD, title: "Brightness step", keywords: ["brightness", "step", "percent"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Brightness step")),
+            SettingsSearchEntry(tab: .hudAndOSD, title: "Brightness fine step", keywords: ["brightness", "fine", "step", "percent"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Brightness fine step")),
             SettingsSearchEntry(tab: .hudAndOSD, title: "Third-party DDC app integration", keywords: ["ddc", "third party", "external", "display", "betterdisplay", "lunar"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Third-party DDC app integration")),
             SettingsSearchEntry(tab: .hudAndOSD, title: "Third-party DDC provider", keywords: ["provider", "betterdisplay", "lunar", "integration", "refresh detection"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Third-party DDC provider")),
             SettingsSearchEntry(tab: .hudAndOSD, title: "Enable external volume control listener", keywords: ["external volume", "ddc volume", "betterdisplay volume", "lunar volume", "disable native volume"], highlightID: SettingsTab.hudAndOSD.highlightID(for: "Enable external volume control listener")),
@@ -763,6 +780,7 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .media, title: "Skip buttons", keywords: ["skip", "controls", "±10"], highlightID: SettingsTab.media.highlightID(for: "Skip buttons")),
             SettingsSearchEntry(tab: .media, title: "Sneak Peek Style", keywords: ["sneak peek", "preview"], highlightID: SettingsTab.media.highlightID(for: "Sneak Peek Style")),
             SettingsSearchEntry(tab: .media, title: "Enable lyrics", keywords: ["lyrics", "song text"], highlightID: SettingsTab.media.highlightID(for: "Enable lyrics")),
+            SettingsSearchEntry(tab: .media, title: "Show live canvas in Dynamic Island", keywords: ["canvas", "live canvas", "album art", "dynamic island", "spotify canvas"], highlightID: SettingsTab.media.highlightID(for: "Show live canvas in Dynamic Island")),
             SettingsSearchEntry(tab: .media, title: "Auto-hide inactive notch media player", keywords: ["auto hide", "inactive", "placeholder", "notch media"], highlightID: SettingsTab.media.highlightID(for: "Auto-hide inactive notch media player")),
             SettingsSearchEntry(tab: .media, title: "Show Change Media Output control", keywords: ["airplay", "route picker", "media output"], highlightID: SettingsTab.media.highlightID(for: "Show Change Media Output control")),
             SettingsSearchEntry(tab: .media, title: "Enable album art parallax", keywords: ["parallax", "lock screen", "album art"], highlightID: SettingsTab.media.highlightID(for: "Enable album art parallax")),
@@ -1305,8 +1323,60 @@ struct GeneralSettings: View {
 }
 
 struct Charge: View {
+    @ObservedObject private var batteryStatusViewModel = BatteryStatusViewModel.shared
+    @Default(.showPowerStatusNotifications) private var showPowerStatusNotifications
+    @Default(.showChargingBatteryHUD) private var showChargingBatteryHUD
+    @Default(.showLowBatteryHUD) private var showLowBatteryHUD
+    @Default(.showFullBatteryHUD) private var showFullBatteryHUD
+    @Default(.chargingBatteryHUDDuration) private var chargingBatteryHUDDuration
+    @Default(.lowBatteryHUDDuration) private var lowBatteryHUDDuration
+    @Default(.fullBatteryHUDDuration) private var fullBatteryHUDDuration
+    @Default(.lowBatteryHUDThreshold) private var lowBatteryHUDThreshold
+    @Default(.fullBatteryHUDThreshold) private var fullBatteryHUDThreshold
+    @Default(.lowBatteryHUDStyle) private var lowBatteryHUDStyle
+    @Default(.fullBatteryHUDStyle) private var fullBatteryHUDStyle
+
     private func highlightID(_ title: String) -> String {
         SettingsTab.battery.highlightID(for: title)
+    }
+
+    private var chargingDurationBinding: Binding<Double> {
+        Binding(
+            get: { Double(chargingBatteryHUDDuration) },
+            set: { chargingBatteryHUDDuration = Int($0.rounded()) }
+        )
+    }
+
+    private var lowBatteryDurationBinding: Binding<Double> {
+        Binding(
+            get: { Double(lowBatteryHUDDuration) },
+            set: { lowBatteryHUDDuration = Int($0.rounded()) }
+        )
+    }
+
+    private var fullBatteryDurationBinding: Binding<Double> {
+        Binding(
+            get: { Double(fullBatteryHUDDuration) },
+            set: { fullBatteryHUDDuration = Int($0.rounded()) }
+        )
+    }
+
+    private var lowBatteryThresholdBinding: Binding<Double> {
+        Binding(
+            get: { Double(lowBatteryHUDThreshold) },
+            set: { lowBatteryHUDThreshold = Int($0.rounded()) }
+        )
+    }
+
+    private var fullBatteryThresholdBinding: Binding<Double> {
+        Binding(
+            get: { Double(fullBatteryHUDThreshold) },
+            set: { fullBatteryHUDThreshold = Int($0.rounded()) }
+        )
+    }
+
+    private func sectionOpacity(_ isEnabled: Bool) -> Double {
+        isEnabled ? 1 : 0.5
     }
 
     var body: some View {
@@ -1340,6 +1410,157 @@ struct Charge: View {
                 } header: {
                     Text("Battery Information")
                 }
+                Section {
+                    Defaults.Toggle(key: .showChargingBatteryHUD) {
+                        Text("Charging HUD")
+                    }
+                    .settingsHighlight(id: highlightID("Charging HUD"))
+
+                    Defaults.Toggle(key: .showLowBatteryHUD) {
+                        Text("Low battery HUD")
+                    }
+                    .settingsHighlight(id: highlightID("Low battery HUD"))
+
+                    Defaults.Toggle(key: .showFullBatteryHUD) {
+                        Text("Fully charged HUD")
+                    }
+                    .settingsHighlight(id: highlightID("Fully charged HUD"))
+                } header: {
+                    Text("Battery HUDs")
+                } footer: {
+                    Text("These temporary HUDs recreate the charging, low-battery, and full-battery notch alerts.")
+                }
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Charging duration")
+                            Spacer()
+                            Text("\(chargingBatteryHUDDuration)s")
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: chargingDurationBinding, in: 1...10, step: 1)
+                    }
+                    .settingsHighlight(id: highlightID("Charging duration"))
+                    .disabled(!showPowerStatusNotifications || !showChargingBatteryHUD)
+                    .opacity(sectionOpacity(showPowerStatusNotifications && showChargingBatteryHUD))
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Low battery duration")
+                            Spacer()
+                            Text("\(lowBatteryHUDDuration)s")
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: lowBatteryDurationBinding, in: 1...10, step: 1)
+                    }
+                    .settingsHighlight(id: highlightID("Low battery duration"))
+                    .disabled(!showPowerStatusNotifications || !showLowBatteryHUD)
+                    .opacity(sectionOpacity(showPowerStatusNotifications && showLowBatteryHUD))
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Full battery duration")
+                            Spacer()
+                            Text("\(fullBatteryHUDDuration)s")
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: fullBatteryDurationBinding, in: 1...10, step: 1)
+                    }
+                    .settingsHighlight(id: highlightID("Full battery duration"))
+                    .disabled(!showPowerStatusNotifications || !showFullBatteryHUD)
+                    .opacity(sectionOpacity(showPowerStatusNotifications && showFullBatteryHUD))
+                } header: {
+                    Text("HUD Duration")
+                }
+                Section {
+                    Button {
+                        batteryStatusViewModel.triggerTestHUD(kind: .charging)
+                    } label: {
+                        Label("Test charging HUD", systemImage: "bolt.fill")
+                    }
+                    .disabled(!showPowerStatusNotifications || !showChargingBatteryHUD)
+
+                    Button {
+                        batteryStatusViewModel.triggerTestHUD(kind: .lowBattery)
+                    } label: {
+                        Label("Test low battery HUD", systemImage: "battery.25")
+                    }
+                    .disabled(!showPowerStatusNotifications || !showLowBatteryHUD)
+
+                    Button {
+                        batteryStatusViewModel.triggerTestHUD(kind: .fullBattery)
+                    } label: {
+                        Label("Test full battery HUD", systemImage: "battery.100")
+                    }
+                    .disabled(!showPowerStatusNotifications || !showFullBatteryHUD)
+                } header: {
+                    Text("HUD Tests")
+                } footer: {
+                    Text("Runs the real notch animation on the current target display. If an external screen is using Dynamic Island mode, the battery HUD is sent there first.")
+                }
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Picker("Low battery style", selection: $lowBatteryHUDStyle) {
+                            ForEach(BatteryNotificationStyle.allCases) { style in
+                                Text(style.title)
+                                    .tag(style)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        Text("Compact matches the charging HUD. Standard uses the expanded DynamicNotch-style card.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .settingsHighlight(id: highlightID("Low battery style"))
+
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Low battery threshold")
+                            Spacer()
+                            Text("\(lowBatteryHUDThreshold)%")
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: lowBatteryThresholdBinding, in: 5...30, step: 1)
+                    }
+                    .settingsHighlight(id: highlightID("Low battery threshold"))
+                } header: {
+                    Text("Low Battery")
+                }
+                .disabled(!showPowerStatusNotifications || !showLowBatteryHUD)
+                .opacity(sectionOpacity(showPowerStatusNotifications && showLowBatteryHUD))
+
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Picker("Full battery style", selection: $fullBatteryHUDStyle) {
+                            ForEach(BatteryNotificationStyle.allCases) { style in
+                                Text(style.title)
+                                    .tag(style)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        Text("Compact keeps the alert inline. Standard uses the taller full-charge HUD with the charging animation.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .settingsHighlight(id: highlightID("Full battery style"))
+
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Full charge threshold")
+                            Spacer()
+                            Text("\(fullBatteryHUDThreshold)%")
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: fullBatteryThresholdBinding, in: 80...100, step: 1)
+                    }
+                    .settingsHighlight(id: highlightID("Full charge threshold"))
+                } header: {
+                    Text("Full Battery")
+                }
+                .disabled(!showPowerStatusNotifications || !showFullBatteryHUD)
+                .opacity(sectionOpacity(showPowerStatusNotifications && showFullBatteryHUD))
             } else {
                 ContentUnavailableView {
                     VStack(spacing: 16) {
@@ -1997,6 +2218,10 @@ private struct ExternalDisplayIntegrationsSection: View {
     @Default(.enableThirdPartyDDCIntegration) var enableThirdPartyDDCIntegration
     @Default(.thirdPartyDDCProvider) var thirdPartyDDCProvider
     @Default(.enableExternalVolumeControlListener) var enableExternalVolumeControlListener
+    @Default(.volumeStepPercent) var volumeStepPercent
+    @Default(.volumeFineStepPercent) var volumeFineStepPercent
+    @Default(.brightnessStepPercent) var brightnessStepPercent
+    @Default(.brightnessFineStepPercent) var brightnessFineStepPercent
     @ObservedObject private var betterDisplayManager = BetterDisplayManager.shared
     @ObservedObject private var lunarManager = LunarManager.shared
 
@@ -2067,6 +2292,74 @@ private struct ExternalDisplayIntegrationsSection: View {
 
     var body: some View {
         Form {
+            Section {
+                Stepper(value: $volumeStepPercent, in: 1...25) {
+                    HStack {
+                        Text("Volume step")
+                        Spacer()
+                        Text("\(volumeStepPercent)%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .settingsHighlight(id: highlightID("Volume step"))
+                .disabled(enableExternalVolumeControlListener)
+
+                Stepper(value: $volumeFineStepPercent, in: 1...25) {
+                    HStack {
+                        Text("Volume fine step")
+                        Spacer()
+                        Text("\(volumeFineStepPercent)%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .settingsHighlight(id: highlightID("Volume fine step"))
+                .disabled(enableExternalVolumeControlListener)
+
+                if enableExternalVolumeControlListener {
+                    Text("Disabled while external display volume integration is active.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Stepper(value: $brightnessStepPercent, in: 1...25) {
+                    HStack {
+                        Text("Brightness step")
+                        Spacer()
+                        Text("\(brightnessStepPercent)%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .settingsHighlight(id: highlightID("Brightness step"))
+                .disabled(enableThirdPartyDDCIntegration)
+
+                Stepper(value: $brightnessFineStepPercent, in: 1...25) {
+                    HStack {
+                        Text("Brightness fine step")
+                        Spacer()
+                        Text("\(brightnessFineStepPercent)%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .settingsHighlight(id: highlightID("Brightness fine step"))
+                .disabled(enableThirdPartyDDCIntegration)
+
+                if enableThirdPartyDDCIntegration {
+                    Text("Disabled while external display brightness integration is active.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Step size")
+            } footer: {
+                Text("Percent change per key press. Fine step applies when holding Shift+Option.")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+
             Section {
                 Toggle("Enable third-party DDC app integration", isOn: $enableThirdPartyDDCIntegration)
                     .settingsHighlight(id: highlightID("Third-party DDC app integration"))
@@ -2450,6 +2743,7 @@ struct Media: View {
     @Default(.lockScreenGlassStyle) private var lockScreenGlassStyle
     @Default(.lockScreenGlassCustomizationMode) private var lockScreenGlassCustomizationMode
     @Default(.lockScreenMusicAlbumParallaxEnabled) private var lockScreenMusicAlbumParallaxEnabled
+    @Default(.lockScreenMusicFullscreenArtworkEnabled) private var lockScreenMusicFullscreenArtworkEnabled
     @Default(.showStandardMediaControls) private var showStandardMediaControls
     @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
     @Default(.parallaxEffectIntensity) private var parallaxEffectIntensity
@@ -2505,6 +2799,11 @@ struct Media: View {
                     .font(.caption)
                 }
             }
+
+            if mediaController == .spotify {
+                SpotifyAuthSettingsSection()
+            }
+
             Section {
                 Defaults.Toggle(key: .showStandardMediaControls) {
                     Text("Show media controls in Dynamic Island")
@@ -2603,6 +2902,11 @@ struct Media: View {
                     Text("Enable lyrics")
                 }
                 .settingsHighlight(id: highlightID("Enable lyrics"))
+                Defaults.Toggle(key: .showLiveCanvasInDynamicIsland) {
+                    Text("Show live canvas in Dynamic Island")
+                }
+                .settingsHighlight(id: highlightID("Show live canvas in Dynamic Island"))
+                .help("Replaces the artwork tile with the live canvas when the current app provides one, and reuses that moving canvas for the surrounding lighting effect.")
                 
                 //Parallax Effect Intensity to control how much parallax is wanted
                 Slider(value: $parallaxEffectIntensity, in: 0...12, step: 1.0) {
@@ -2695,6 +2999,27 @@ struct Media: View {
                     unavailableBlurRow
                         .opacity(enableLockScreenMediaWidget ? 1 : 0.5)
                         .settingsHighlight(id: highlightID("Enable media panel blur"))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Defaults.Toggle(key: .lockScreenMusicFullscreenArtworkEnabled) {
+                        Text("Fullscreen artwork on right-click")
+                    }
+                    .disabled(!enableLockScreenMediaWidget)
+                    .settingsHighlight(id: highlightID("Fullscreen artwork on right-click"))
+                    Defaults.Toggle(key: .lockScreenUseArtworkLayoutOverFullscreenCanvas) {
+                        Text("Use album art layout over fullscreen canvas")
+                    }
+                    .disabled(!enableLockScreenMediaWidget || !lockScreenMusicFullscreenArtworkEnabled)
+                    .settingsHighlight(id: highlightID("Use album art layout over fullscreen canvas"))
+                    Defaults.Toggle(key: .lockScreenKeepAlbumArtVisibleDuringFullscreenArtwork) {
+                        Text("Keep album art visible during fullscreen artwork")
+                    }
+                    .disabled(!enableLockScreenMediaWidget || !lockScreenMusicFullscreenArtworkEnabled)
+                    .settingsHighlight(id: highlightID("Keep album art visible during fullscreen artwork"))
+                    Text("Right-click the album art on the lock screen to set it as the wallpaper. Right-click again or click the background to restore the original wallpaper. If a canvas is available, Atoll can also keep the same album art + player layout on top of the live canvas.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } header: {
                 Text("Lock Screen Integration")
@@ -4576,6 +4901,7 @@ struct LockScreenSettings: View {
     @Default(.lockScreenTimerGlassCustomizationMode) private var lockScreenTimerGlassCustomizationMode
     @Default(.lockScreenTimerWidgetUsesBlur) private var timerGlassModeIsGlass
     @Default(.enableLockScreenMediaWidget) private var enableLockScreenMediaWidget
+    @Default(.lockScreenMusicFullscreenArtworkEnabled) private var lockScreenMusicFullscreenArtworkEnabled
     @Default(.enableLockScreenTimerWidget) private var enableLockScreenTimerWidget
     @Default(.enableLockScreenWeatherWidget) private var enableLockScreenWeatherWidget
     @Default(.enableLockScreenFocusWidget) private var enableLockScreenFocusWidget
@@ -4808,6 +5134,27 @@ struct LockScreenSettings: View {
                     blurSettingUnavailableRow
                         .opacity(enableLockScreenMediaWidget ? 1 : 0.5)
                         .settingsHighlight(id: highlightID("Enable media panel blur"))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Defaults.Toggle(key: .lockScreenMusicFullscreenArtworkEnabled) {
+                        Text("Fullscreen artwork on right-click")
+                    }
+                    .disabled(!enableLockScreenMediaWidget)
+                    .settingsHighlight(id: highlightID("Fullscreen artwork on right-click"))
+                    Defaults.Toggle(key: .lockScreenUseArtworkLayoutOverFullscreenCanvas) {
+                        Text("Use album art layout over fullscreen canvas")
+                    }
+                    .disabled(!enableLockScreenMediaWidget || !lockScreenMusicFullscreenArtworkEnabled)
+                    .settingsHighlight(id: highlightID("Use album art layout over fullscreen canvas"))
+                    Defaults.Toggle(key: .lockScreenKeepAlbumArtVisibleDuringFullscreenArtwork) {
+                        Text("Keep album art visible during fullscreen artwork")
+                    }
+                    .disabled(!enableLockScreenMediaWidget || !lockScreenMusicFullscreenArtworkEnabled)
+                    .settingsHighlight(id: highlightID("Keep album art visible during fullscreen artwork"))
+                    Text("Right-click the album art on the lock screen to set it as the wallpaper. Right-click again or click the background to restore the original wallpaper. If a canvas is available, Atoll can also keep the same album art + player layout on top of the live canvas.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if !showStandardMediaControls {
