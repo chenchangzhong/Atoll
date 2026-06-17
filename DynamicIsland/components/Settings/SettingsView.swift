@@ -1045,8 +1045,6 @@ struct GeneralSettings: View {
     @Default(.nonNotchHeight) var nonNotchHeight
     @Default(.nonNotchHeightMode) var nonNotchHeightMode
     @Default(.notchHeight) var notchHeight
-    @Default(.closedNotchWidth) var closedNotchWidth
-    @Default(.customizePhysicalNotchWidth) var customizePhysicalNotchWidth
     @Default(.notchHeightMode) var notchHeightMode
     @Default(.showOnAllDisplays) var showOnAllDisplays
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
@@ -2756,7 +2754,7 @@ struct Media: View {
     @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
     @Default(.parallaxEffectIntensity) private var parallaxEffectIntensity
 
-    
+
     @ObservedObject private var musicManager = MusicManager.shared
 
     private var isAppleMusicActive: Bool {
@@ -2915,7 +2913,7 @@ struct Media: View {
                 }
                 .settingsHighlight(id: highlightID("Show live canvas in Dynamic Island"))
                 .help("Replaces the artwork tile with the live canvas when the current app provides one, and reuses that moving canvas for the surrounding lighting effect.")
-                
+
                 //Parallax Effect Intensity to control how much parallax is wanted
                 Slider(value: $parallaxEffectIntensity, in: 0...12, step: 1.0) {
                     HStack {
@@ -2926,7 +2924,7 @@ struct Media: View {
                     }
                 }
                 .settingsHighlight(id: highlightID("Enable album art parallax effect"))
-                
+
                 Picker("Sneak Peek Style", selection: $sneakPeekStyles){
                     ForEach(SneakPeekStyle.allCases) { style in
                         Text(style.rawValue).tag(style)
@@ -2945,7 +2943,7 @@ struct Media: View {
                         }
                     }
                 }
-                
+
                 Defaults.Toggle(key: .showSongMetadataInClosedNotch) {
                     Text("Show song title and artist on non-notch displays")
                 }
@@ -3403,7 +3401,7 @@ struct CalendarSettings: View {
                     .disabled(!lockScreenShowCalendarEvent)
                     .settingsHighlight(id: highlightID("Show start time after event begins"))
                 }
-                
+
                 // MARK: - Third-party Calendar Integration
                 Section {
                     Defaults.Toggle(key: .enableThirdPartyCalendarApp) {
@@ -3415,7 +3413,7 @@ struct CalendarSettings: View {
                         }
                     }
                     .settingsHighlight(id: highlightID("Enable third-party calendar app launch"))
-                    
+
                     if enableThirdPartyCalendarApp {
                         Picker("Calendar App", selection: $selectedCalendarApp) {
                             ForEach(ThirdPartyCalendarApp.allCases) { app in
@@ -3431,7 +3429,7 @@ struct CalendarSettings: View {
                             }
                         }
                         .settingsHighlight(id: highlightID("Calendar App"))
-                        
+
                         if selectedCalendarApp == .fantastical {
                             Picker("Default View", selection: $fantasticalDefaultView) {
                                 ForEach(FantasticalViewStyle.allCases, id: \.self) { style in
@@ -3895,7 +3893,7 @@ struct Shelf: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            
+
             if quickShareProvider == "LocalSend" {
                 LocalSendSettingsSection(highlightID: highlightID)
             }
@@ -3913,10 +3911,10 @@ struct Shelf: View {
 
 private struct LocalSendSettingsSection: View {
     let highlightID: (String) -> String
-    
+
     @Default(.localSendDevicePickerGlassMode) private var glassMode
     @Default(.localSendDevicePickerLiquidGlassVariant) private var liquidGlassVariant
-    
+
     var body: some View {
         Section {
             Picker("Device Picker Style", selection: $glassMode) {
@@ -3925,7 +3923,7 @@ private struct LocalSendSettingsSection: View {
                 }
             }
             .pickerStyle(.menu)
-            
+
             if glassMode == .customLiquid {
                 Picker("Liquid Glass Variant", selection: $liquidGlassVariant) {
                     ForEach(LiquidGlassVariant.allCases) { variant in
@@ -4187,8 +4185,6 @@ struct Appearance: View {
     @Default(.customAppIcons) private var customAppIcons
     @Default(.selectedAppIconID) private var selectedAppIconID
     @Default(.openNotchWidth) var openNotchWidth
-    @Default(.closedNotchWidth) var closedNotchWidth
-    @Default(.customizePhysicalNotchWidth) var customizePhysicalNotchWidth
     @Default(.enableMinimalisticUI) var enableMinimalisticUI
     @Default(.lockScreenGlassCustomizationMode) private var lockScreenGlassCustomizationMode
     @Default(.lockScreenGlassStyle) private var lockScreenGlassStyle
@@ -4218,12 +4214,12 @@ struct Appearance: View {
     }
 
     private var notchWidthRange: ClosedRange<Double> {
-        let minW = Double(currentRecommendedMinimumNotchWidth())
+        let minW = Double(standardBaseOpenNotchWidth)
         let maxW = min(900, Double(maxAllowedNotchWidth()))
         return minW...max(minW, maxW)
     }
     private var defaultOpenNotchWidth: CGFloat {
-        currentRecommendedMinimumNotchWidth()
+        standardBaseOpenNotchWidth
     }
 
     private func highlightID(_ title: String) -> String {
@@ -4588,7 +4584,7 @@ struct Appearance: View {
                         .tag(MirrorShapeEnum.rectangle)
                 }
                 .settingsHighlight(id: highlightID("Mirror shape"))
-                
+
                 if webcamManager.cameraAvailable {
                     Picker("Mirror Camera", selection: $selectedCameraID) {
                         ForEach(webcamManager.availableCameras, id: \.uniqueID) { device in
@@ -4828,12 +4824,8 @@ struct Appearance: View {
     @ViewBuilder
     private func notchWidthControls() -> some View {
         Section {
-            let recommendedMin = currentRecommendedMinimumNotchWidth()
-            let tabCount = enabledStandardTabCount()
-            let dynamicRange = Double(recommendedMin)...900
-            
-            let closedRange = Double(80)...400
-            let minimalisticRange = Double(250)...600
+            let minWidth = standardBaseOpenNotchWidth
+            let dynamicRange = Double(minWidth)...900
 
             let widthBinding = Binding<Double>(
                 get: { Double(openNotchWidth) },
@@ -4845,44 +4837,8 @@ struct Appearance: View {
                     }
                 }
             )
-            
-            let closedWidthBinding = Binding<Double>(
-                get: { Double(closedNotchWidth) },
-                set: { newValue in
-                    let clamped = min(max(newValue, closedRange.lowerBound), closedRange.upperBound)
-                    let value = CGFloat(clamped)
-                    if closedNotchWidth != value {
-                        closedNotchWidth = value
-                        NotificationCenter.default.post(name: Notification.Name.notchHeightChanged, object: nil)
-                    }
-                }
-            )
 
             VStack(alignment: .leading, spacing: 10) {
-                Defaults.Toggle(key: .customizePhysicalNotchWidth) {
-                    Text("Customize physical notch width")
-                }
-                .onChange(of: customizePhysicalNotchWidth) {
-                    NotificationCenter.default.post(name: Notification.Name.notchHeightChanged, object: nil)
-                }
-                .settingsHighlight(id: highlightID("Customize physical notch width"))
-                
-                Slider(
-                    value: closedWidthBinding,
-                    in: closedRange,
-                    step: 5
-                ) {
-                    HStack {
-                        Text("Closed notch / pill width")
-                        Spacer()
-                        Text("\(Int(closedNotchWidth)) px")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .settingsHighlight(id: highlightID("Closed notch / pill width"))
-
-                Divider().padding(.vertical, 4)
-
                 Slider(
                     value: widthBinding,
                     in: dynamicRange,
@@ -4899,19 +4855,19 @@ struct Appearance: View {
                 .settingsHighlight(id: highlightID("Expanded notch width"))
 
                 HStack {
-                    Text("\(tabCount) tab\(tabCount == 1 ? "" : "s") enabled · min \(Int(recommendedMin)) px")
+                    Text("Min \(Int(minWidth)) px")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset Width") {
-                        openNotchWidth = recommendedMin
+                        openNotchWidth = minWidth
                     }
-                    .disabled(abs(openNotchWidth - recommendedMin) < 0.5)
+                    .disabled(abs(openNotchWidth - minWidth) < 0.5)
                     .buttonStyle(.bordered)
                 }
 
                 let description = enableMinimalisticUI
-                ? String(localized: "Expanded width adjustments apply only to the standard notch layout. Disable Minimalistic UI to edit this value.")
+                ? String(localized: "Width adjustments apply only to the standard notch layout. Disable Minimalistic UI to edit this value.")
                 : String(localized: "Recommended minimum width adjusts automatically based on the number of enabled tabs.")
 
                 Text(description)
@@ -7525,12 +7481,32 @@ struct ScreenAssistantSettings: View {
     @ObservedObject var screenAssistantManager = ScreenAssistantManager.shared
     @Default(.enableScreenAssistant) var enableScreenAssistant
     @Default(.screenAssistantDisplayMode) var screenAssistantDisplayMode
+    @Default(.selectedAIProvider) var selectedAIProvider
     @Default(.geminiApiKey) var geminiApiKey
-    @State private var apiKeyText = ""
-    @State private var showingApiKey = false
+    @Default(.openaiApiKey) var openaiApiKey
+    @Default(.claudeApiKey) var claudeApiKey
+    @Default(.groqApiKey) var groqApiKey
+    @Default(.customApiKey) var customApiKey
+    @Default(.customEndpoint) var customEndpoint
+    @Default(.localModelEndpoint) var localModelEndpoint
 
     private func highlightID(_ title: String) -> String {
         SettingsTab.screenAssistant.highlightID(for: title)
+    }
+
+    private var currentProviderName: String {
+        selectedAIProvider.displayName
+    }
+
+    private var currentApiKeyStatus: (isSet: Bool, label: String) {
+        switch selectedAIProvider {
+        case .gemini: return (!geminiApiKey.isEmpty, geminiApiKey.isEmpty ? "Not Set" : "••••••••")
+        case .openai: return (!openaiApiKey.isEmpty, openaiApiKey.isEmpty ? "Not Set" : "••••••••")
+        case .claude: return (!claudeApiKey.isEmpty, claudeApiKey.isEmpty ? "Not Set" : "••••••••")
+        case .groq: return (!groqApiKey.isEmpty, groqApiKey.isEmpty ? "Not Set" : "••••••••")
+        case .custom: return (!customEndpoint.isEmpty, customEndpoint.isEmpty ? "Not Set" : "Configured")
+        case .local: return (!localModelEndpoint.isEmpty, localModelEndpoint.isEmpty ? "Not Set" : "Configured")
+        }
     }
 
     var body: some View {
@@ -7549,54 +7525,20 @@ struct ScreenAssistantSettings: View {
             if enableScreenAssistant {
                 Section {
                     HStack {
-                        Text("Gemini API Key")
+                        Text("AI Provider")
                         Spacer()
-                        if geminiApiKey.isEmpty {
-                            Text("Not Set")
-                                .foregroundColor(.red)
-                        } else {
-                            Text("••••••••")
-                                .foregroundColor(.green)
-                        }
-
-                        Button(showingApiKey ? "Hide" : (geminiApiKey.isEmpty ? "Set" : "Change")) {
-                            if showingApiKey {
-                                showingApiKey = false
-                                if !apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Defaults[.geminiApiKey] = apiKeyText
-                                }
-                                apiKeyText = ""
-                            } else {
-                                showingApiKey = true
-                                apiKeyText = geminiApiKey
-                            }
-                        }
+                        Text(currentProviderName)
+                            .foregroundColor(.secondary)
                     }
 
-                    if showingApiKey {
-                        VStack(alignment: .leading, spacing: 8) {
-                            SecureField("Enter your Gemini API Key", text: $apiKeyText)
-                                .textFieldStyle(.roundedBorder)
+                    HStack {
+                        Text("API Key")
+                        Spacer()
+                        Text(currentApiKeyStatus.label)
+                            .foregroundColor(currentApiKeyStatus.isSet ? .green : .red)
 
-                            Text("Get your free API key from Google AI Studio")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                            HStack {
-                                Button("Open Google AI Studio") {
-                                    NSWorkspace.shared.open(URL(string: "https://aistudio.google.com/app/apikey")!)
-                                }
-                                .buttonStyle(.link)
-
-                                Spacer()
-
-                                Button("Save") {
-                                    Defaults[.geminiApiKey] = apiKeyText
-                                    showingApiKey = false
-                                    apiKeyText = ""
-                                }
-                                .disabled(apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
+                        Button("Configure") {
+                            ModelSelectionPanel.open()
                         }
                     }
 
@@ -7988,14 +7930,14 @@ struct CustomOSDSettings: View {
                                     previewType = .brightness
                                 }
                                 .buttonStyle(.bordered)
-                                
+
                                 Button("Backlight") {
                                     previewType = .backlight
                                 }
                                 .buttonStyle(.bordered)
                             }
                             .controlSize(.small)
-                            
+
                             Slider(value: $previewValue, in: 0...1)
                                 .frame(width: 160)
                         }

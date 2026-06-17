@@ -34,7 +34,7 @@ struct TimerControlWindowMetrics: Equatable {
 final class TimerControlWindowManager {
     static let shared = TimerControlWindowManager()
 
-    private var window: NSPanel?
+    private var window: NSWindow?
     private var hostingView: NSHostingView<TimerControlOverlay>?
     private var hasDelegated = false
     private var lastMetrics: TimerControlWindowMetrics?
@@ -146,7 +146,7 @@ final class TimerControlWindowManager {
         }
     }
 
-    private func tearDownWindowResources(using window: NSPanel? = nil) {
+    private func tearDownWindowResources(using window: NSWindow? = nil) {
         let targetWindow = window ?? self.window
         targetWindow?.contentView = nil
         targetWindow?.orderOut(nil)
@@ -166,12 +166,12 @@ final class TimerControlWindowManager {
         return view
     }
 
-    private func ensureWindow(on screen: NSScreen) -> NSPanel {
+    private func ensureWindow(on screen: NSScreen) -> NSWindow {
         if let window {
             return window
         }
 
-        let window = NSPanel(
+        let window = NSWindow(
             contentRect: NSRect(x: screen.frame.midX, y: screen.frame.midY, width: 220, height: 64),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -196,6 +196,7 @@ final class TimerControlWindowManager {
     }
 
     private func measuredSize(for hosting: NSHostingView<TimerControlOverlay>) -> CGSize {
+        hosting.layoutSubtreeIfNeeded()
         let size = hosting.fittingSize
         return CGSize(width: ceil(size.width), height: ceil(size.height))
     }

@@ -29,7 +29,7 @@ let batterySneakSize: CGSize = .init(width: 160, height: 1)
 
 var openNotchSize: CGSize {
     let storedWidth = Defaults[.openNotchWidth]
-    let minWidth = currentRecommendedMinimumNotchWidth()
+    let minWidth = standardBaseOpenNotchWidth
     let maxWidth = maxAllowedNotchWidth()
     let width = min(max(storedWidth, minWidth), maxWidth)
     return .init(width: width, height: 200)
@@ -107,12 +107,10 @@ func currentRecommendedMinimumNotchWidth() -> CGFloat {
     recommendedMinimumNotchWidth(forTabCount: enabledStandardTabCount())
 }
 
-/// Enforces the minimum notch width based on current tab count.
+/// Enforces the minimum notch width.
 /// Also clamps to screen width so the notch never exceeds the display.
-/// Only adjusts when not in minimalistic mode.
 func enforceMinimumNotchWidth() {
-    guard !Defaults[.enableMinimalisticUI] else { return }
-    let minWidth = currentRecommendedMinimumNotchWidth()
+    let minWidth = standardBaseOpenNotchWidth
     let maxWidth = maxAllowedNotchWidth()
     var width = Defaults[.openNotchWidth]
     if width < minWidth { width = minWidth }
@@ -121,6 +119,7 @@ func enforceMinimumNotchWidth() {
         Defaults[.openNotchWidth] = width
     }
 }
+let standardBaseOpenNotchWidth: CGFloat = 420
 private let minimalisticBaseOpenNotchSize: CGSize = .init(width: 420, height: 180)
 private let minimalisticLyricsExtraHeight: CGFloat = 40
 let minimalisticTimerCountdownTopPadding: CGFloat = 12
@@ -132,18 +131,13 @@ let notchShadowPaddingStandard: CGFloat = 18
 let notchShadowPaddingMinimalistic: CGFloat = 12
 
 @MainActor
-func minimalisticOpenNotchSize(isDynamicIslandMode: Bool) -> CGSize {
+var minimalisticOpenNotchSize: CGSize {
     var size = minimalisticBaseOpenNotchSize
-
-    if isDynamicIslandMode {
-        size.width = 340 // Reduced from 420 for a narrower pill
-        size.height = 144 // Exact height of the minimalistic music player view
-    }
 
     if Defaults[.enableLyrics] {
         size.height += minimalisticLyricsExtraHeight
     }
-    
+
     let reminderCount = ReminderLiveActivityManager.shared.activeWindowReminders.count
     if reminderCount > 0 {
         let reminderHeight = ReminderLiveActivityManager.additionalHeight(forRowCount: reminderCount)
@@ -299,18 +293,18 @@ func getScreenFrame(_ screen: String? = nil) -> CGRect? {
     if let customScreen = screen {
         selectedScreen = NSScreen.screens.first(where: { $0.localizedName == customScreen })
     }
-    
+
     if let screen = selectedScreen {
         return screen.frame
     }
-    
+
     return nil
 }
 
 func getClosedNotchSize(screen: String? = nil) -> CGSize {
     // Default notch size, to avoid using optionals
     var notchHeight: CGFloat = Defaults[.nonNotchHeight]
-    var notchWidth: CGFloat = Defaults[.closedNotchWidth]
+    var notchWidth: CGFloat = 185
 
     var selectedScreen = NSScreen.main
 
@@ -325,10 +319,6 @@ func getClosedNotchSize(screen: String? = nil) -> CGSize {
            let topRightNotchpadding: CGFloat = screen.auxiliaryTopRightArea?.width
         {
             notchWidth = screen.frame.width - topLeftNotchpadding - topRightNotchpadding + 4
-            
-            if Defaults[.customizePhysicalNotchWidth] {
-                notchWidth = Defaults[.closedNotchWidth]
-            }
         }
 
         // Check if the Mac has a notch

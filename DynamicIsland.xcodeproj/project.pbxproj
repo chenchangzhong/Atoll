@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -33,9 +33,8 @@
 /* Begin PBXCopyFilesBuildPhase section */
 		7EA69B1B2F5AE13500EB2D16 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 8;
 			dstPath = Contents/Helpers;
-			dstSubfolderSpec = 1;
+			dstSubfolder = Wrapper;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 1;
@@ -112,7 +111,6 @@
 /* Begin PBXFrameworksBuildPhase section */
 		F54406E42CD4987A00C7AFD9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				7EF19C172F577040005B9929 /* SwiftTerm in Frameworks */,
 				7EF10C122F817ECF004229A0 /* Accelerate.framework in Frameworks */,
@@ -129,7 +127,6 @@
 				7E288D122F1659EF0020C117 /* AtollExtensionKit in Frameworks */,
 				7E6118142E24071E0050006C /* LaunchAtLogin in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -203,8 +200,6 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				7EA69B1C2F5AE15C00EB2D16 /* Contents */,
 				F54406E92CD4987A00C7AFD9 /* DynamicIsland */,
@@ -271,7 +266,7 @@
 				7E288D102F1659EF0020C117 /* XCRemoteSwiftPackageReference "AtollExtensionKit" */,
 				7EF19C152F577040005B9929 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = F54406E82CD4987A00C7AFD9 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -284,7 +279,6 @@
 /* Begin PBXResourcesBuildPhase section */
 		F54406E52CD4987A00C7AFD9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				7E9918722EFDAE5B002EDFD5 /* MediaRemoteAdapter.framework in Resources */,
 				7E8130402E3FB40500E08F3F /* mediaremote-adapter.pl in Resources */,
@@ -294,7 +288,6 @@
 				7E8840D72E9A346700C5CB8C /* Dog waiting.json in Resources */,
 				7E8840DB2E9A347800C5CB8C /* Orange Cat Peeping.json in Resources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
@@ -302,35 +295,40 @@
 		7EFAA8AA2F6F12F3000A99E8 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$CONFIGURATION\" != \"Release\" ] || [ \"$ACTION\" != \"install\" ]; then\n\texit 0\nfi\n\nAPP=\"$CODESIGNING_FOLDER_PATH\"\nSPARKLE=\"$APP/Contents/Frameworks/Sparkle.framework\"\nXPC_DIR=\"$SPARKLE/Versions/Current/XPCServices\"\n\nif [ ! -d \"$XPC_DIR\" ]; then\n\texit 0\nfi\n\nfor xpc in \"$XPC_DIR\"/*.xpc; do\n\t/usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp --options runtime --preserve-metadata=identifier,entitlements \"$xpc\"\ndone\n\n/usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp --options runtime --preserve-metadata=identifier,entitlements \"$SPARKLE\"\n";
+			shellScript = (
+				"if [ \"$CONFIGURATION\" != \"Release\" ] || [ \"$ACTION\" != \"install\" ]; then",
+				"\texit 0",
+				"fi",
+				"",
+				"APP=\"$CODESIGNING_FOLDER_PATH\"",
+				"SPARKLE=\"$APP/Contents/Frameworks/Sparkle.framework\"",
+				"XPC_DIR=\"$SPARKLE/Versions/Current/XPCServices\"",
+				"",
+				"if [ ! -d \"$XPC_DIR\" ]; then",
+				"\texit 0",
+				"fi",
+				"",
+				"for xpc in \"$XPC_DIR\"/*.xpc; do",
+				"\t/usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp --options runtime --preserve-metadata=identifier,entitlements \"$xpc\"",
+				"done",
+				"",
+				"/usr/bin/codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp --options runtime --preserve-metadata=identifier,entitlements \"$SPARKLE\"",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		F54406E32CD4987A00C7AFD9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		F54406F42CD4987B00C7AFD9 /* Debug */ = {
+		F54406F42CD4987B00C7AFD9 /* Debug configuration for PBXProject "DynamicIsland" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -393,7 +391,7 @@
 			};
 			name = Debug;
 		};
-		F54406F52CD4987B00C7AFD9 /* Release */ = {
+		F54406F52CD4987B00C7AFD9 /* Release configuration for PBXProject "DynamicIsland" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -448,7 +446,7 @@
 			};
 			name = Release;
 		};
-		F54406F72CD4987B00C7AFD9 /* Debug */ = {
+		F54406F72CD4987B00C7AFD9 /* Debug configuration for PBXNativeTarget "DynamicIsland" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -461,7 +459,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_ASSET_PATHS = "\"DynamicIsland/Preview Content\"";
-				DEVELOPMENT_TEAM = 9Y64TRM77N;
+				DEVELOPMENT_TEAM = X53Y27JYRA;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -520,7 +518,7 @@
 			};
 			name = Debug;
 		};
-		F54406F82CD4987B00C7AFD9 /* Release */ = {
+		F54406F82CD4987B00C7AFD9 /* Release configuration for PBXNativeTarget "DynamicIsland" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -528,13 +526,11 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = DynamicIsland/DynamicIsland.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_ASSET_PATHS = "\"DynamicIsland/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 9Y64TRM77N;
+				DEVELOPMENT_TEAM = X53Y27JYRA;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -599,19 +595,17 @@
 		F54406E22CD4987A00C7AFD9 /* Build configuration list for PBXProject "DynamicIsland" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F54406F42CD4987B00C7AFD9 /* Debug */,
-				F54406F52CD4987B00C7AFD9 /* Release */,
+				F54406F42CD4987B00C7AFD9 /* Debug configuration for PBXProject "DynamicIsland" */,
+				F54406F52CD4987B00C7AFD9 /* Release configuration for PBXProject "DynamicIsland" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		F54406F62CD4987B00C7AFD9 /* Build configuration list for PBXNativeTarget "DynamicIsland" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F54406F72CD4987B00C7AFD9 /* Debug */,
-				F54406F82CD4987B00C7AFD9 /* Release */,
+				F54406F72CD4987B00C7AFD9 /* Debug configuration for PBXNativeTarget "DynamicIsland" */,
+				F54406F82CD4987B00C7AFD9 /* Release configuration for PBXNativeTarget "DynamicIsland" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

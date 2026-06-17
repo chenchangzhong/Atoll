@@ -89,19 +89,6 @@ final class SystemTimerBridge {
     private var logDidCompleteActiveTimer = false
     private var nonJSONLogLineCount = 0
 
-    // Coalesce high-frequency timer updates onto main; unthrottled firehose freezes the menu bar.
-    private struct PendingMainUpdate {
-        let remaining: TimeInterval
-        let total: TimeInterval
-        let paused: Bool
-        let name: String
-    }
-    private var pendingMainUpdate: PendingMainUpdate?
-    private var mainDispatchScheduled = false
-    private var lastMainDispatch: Date?
-    private let minMainDispatchInterval: TimeInterval = 0.25
-    private let maxLogBufferBytes = 1_048_576 // 1 MB; drop backlog beyond this
-
     private var menuExtra: AXUIElement?
     private var fileDescriptor: CInt = -1
     private var fileMonitor: DispatchSourceFileSystemObject?
@@ -203,7 +190,6 @@ final class SystemTimerBridge {
             self.logDidCompleteActiveTimer = false
             self.logRestartWorkItem?.cancel()
             self.logRestartWorkItem = nil
-            self.pendingMainUpdate = nil
 
             if clearTimer {
                 self.logDebug("Clearing external timer state via TimerManager")
@@ -233,10 +219,7 @@ final class SystemTimerBridge {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        // Exclude MobileTimer XPC/alarm connection chatter; pure noise that floods the pipe.
         let predicate = "subsystem == \"com.apple.mobiletimer.logging\""
-            + " AND NOT eventMessage CONTAINS \"MTXPCConnectionProvider\""
-            + " AND NOT eventMessage CONTAINS \"MTAlarmManager\""
         process.arguments = [
             "stream",
             "--style",
@@ -340,13 +323,6 @@ final class SystemTimerBridge {
 
     private func consumeLogData(_ data: Data) {
         logBuffer.append(data)
-
-        // Drop backlog if the stream outpaces parsing; prevents unbounded growth during a storm.
-        if logBuffer.count > maxLogBufferBytes {
-            logError("Log buffer exceeded \(maxLogBufferBytes) bytes; dropping backlog to protect the run loop")
-            logBuffer.removeAll(keepingCapacity: false)
-            return
-        }
 
         while let newlineIndex = logBuffer.firstIndex(of: UInt8(10)) {
             let lineData = Data(logBuffer[..<newlineIndex])
@@ -489,59 +465,27 @@ final class SystemTimerBridge {
             displayName = "Clock Timer"
         }
 
-        scheduleMainUpdate(
-            PendingMainUpdate(remaining: remaining, total: total, paused: paused, name: displayName)
-        )
-    }
-
-    /// Throttles updates to ≤1/`minMainDispatchInterval` (latest wins); completion bypasses so end isn't dropped. Runs on serial `queue`, no locking needed.
-    private func scheduleMainUpdate(_ update: PendingMainUpdate) {
-        let isCompletion = update.remaining <= 0
-        pendingMainUpdate = update
-
-        if mainDispatchScheduled, !isCompletion { return }
-
-        var delay: TimeInterval = 0
-        if !isCompletion, let last = lastMainDispatch {
-            let elapsed = Date().timeIntervalSince(last)
-            if elapsed < minMainDispatchInterval {
-                delay = minMainDispatchInterval - elapsed
-            }
-        }
-
-        mainDispatchScheduled = true
-        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.flushMainUpdate()
-        }
-    }
-
-    private func flushMainUpdate() {
-        mainDispatchScheduled = false
-        guard let update = pendingMainUpdate else { return }
-        pendingMainUpdate = nil
-        lastMainDispatch = Date()
-
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if TimerManager.shared.isExternalTimerActive {
-                self.logDebug("Updating existing external timer (total: \(update.total))")
+                self.logDebug("Updating existing external timer (total: \(total))")
                 TimerManager.shared.updateExternalTimer(
-                    remaining: update.remaining,
-                    totalDuration: update.total,
-                    isPaused: update.paused,
-                    name: update.name
+                    remaining: remaining,
+                    totalDuration: total,
+                    isPaused: paused,
+                    name: displayName
                 )
             } else {
-                self.logInfo("Adopting system timer as external source (name: \(update.name))")
+                self.logInfo("Adopting system timer as external source (name: \(displayName))")
                 TimerManager.shared.adoptExternalTimer(
-                    name: update.name,
-                    totalDuration: update.total,
-                    remaining: update.remaining,
-                    isPaused: update.paused
+                    name: displayName,
+                    totalDuration: total,
+                    remaining: remaining,
+                    isPaused: paused
                 )
             }
 
-            if update.remaining <= 0 {
+            if remaining <= 0 {
                 self.logDidCompleteActiveTimer = true
                 self.logInfo("System timer reported completion")
                 TimerManager.shared.completeExternalTimer()
@@ -569,7 +513,8 @@ final class SystemTimerBridge {
         }
         guard let message = payload["eventMessage"] as? String, !message.isEmpty else { return }
 
-        // No per-line log here: at firehose volume the os_log call is itself a bottleneck.
+        logDebug("Log event: \(message)")
+
         if message.contains("scheduled timers:") {
             handleScheduledTimersMessage(message)
         }
