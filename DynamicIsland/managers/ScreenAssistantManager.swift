@@ -516,14 +516,24 @@ class ScreenAssistantManager: NSObject, ObservableObject {
             return
         }
 
-        guard let url = URL(string: "\(endpoint)/api/chat") else {
+        // Support both Ollama native API and OpenAI-compatible endpoints
+        let isOpenAICompatible = endpoint.contains("/v1")
+        let urlString = isOpenAICompatible ? "\(endpoint)/chat/completions" : "\(endpoint)/api/chat"
+
+        guard let url = URL(string: urlString) else {
             print("❌ ScreenAssistant: Invalid local API URL")
             addAssistantMessage("Error: Invalid local API URL")
             isLoading = false
             return
         }
 
-        performAPIRequest(url: url, requestBody: buildOllamaRequestBody(message: message, files: files), provider: .local)
+        if isOpenAICompatible {
+            let selectedModel = Defaults[.selectedAIModel]
+            let modelId = selectedModel?.id ?? "llama3.2"
+            performAPIRequest(url: url, requestBody: buildOpenAIRequestBody(message: message, files: files, model: modelId), provider: .local)
+        } else {
+            performAPIRequest(url: url, requestBody: buildOllamaRequestBody(message: message, files: files), provider: .local)
+        }
     }
 
     private func sendToCustomAPI(message: String, files: [ScreenAssistantFile]) {
@@ -960,15 +970,34 @@ class ScreenAssistantManager: NSObject, ObservableObject {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 print("✅ ScreenAssistant: Successfully parsed Ollama JSON response")
 
+                // Ollama native format: {"message": {"content": "..."}}
                 if let message = json["message"] as? [String: Any],
                    let content = message["content"] as? String {
-
                     print("✅ ScreenAssistant: Got Ollama response text: \(content.prefix(100))...")
                     addAssistantMessage(content)
-                } else {
-                    print("❌ ScreenAssistant: Unexpected Ollama response format")
-                    addAssistantMessage("Error: Unexpected response format from local model")
+                    return
                 }
+
+                // Ollama simple format: {"response": "..."}
+                if let response = json["response"] as? String {
+                    print("✅ ScreenAssistant: Got Ollama response text: \(response.prefix(100))...")
+                    addAssistantMessage(response)
+                    return
+                }
+
+                // OpenAI-compatible format (when using /v1 endpoint)
+                if let choices = json["choices"] as? [[String: Any]],
+                   let first = choices.first,
+                   let message = first["message"] as? [String: Any],
+                   let content = message["content"] as? String {
+                    print("✅ ScreenAssistant: Got OpenAI-compatible response: \(content.prefix(100))...")
+                    addAssistantMessage(content)
+                    return
+                }
+
+                print("❌ ScreenAssistant: Unexpected Ollama response format")
+                print("📄 Response keys: \(json.keys)")
+                addAssistantMessage("Error: Unexpected response format from local model")
             }
         } catch {
             print("❌ ScreenAssistant: Ollama JSON parsing error - \(error)")
