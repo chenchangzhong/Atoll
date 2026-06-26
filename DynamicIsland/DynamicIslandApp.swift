@@ -123,6 +123,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     // Debouncing mechanism for window size updates
     private var windowSizeUpdateWorkItem: DispatchWorkItem?
+    
+    // Debouncing for screen configuration changes (display connect/disconnect)
+    private var screenChangeDebounceWorkItem: DispatchWorkItem?
 //    let calendarManager = CalendarManager.shared
 //    let webcamManager = WebcamManager.shared
 //    var closeNotchWorkItem: DispatchWorkItem?
@@ -244,6 +247,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Cancel any pending window size updates
         windowSizeUpdateWorkItem?.cancel()
+        screenChangeDebounceWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
         extensionXPCServiceHost.stop()
         extensionRPCServer.stop()
@@ -299,8 +303,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    private func cleanupWindows(shouldInvert: Bool = false) {
-        if shouldInvert ? !Defaults[.showOnAllDisplays] : Defaults[.showOnAllDisplays] {
+    private func cleanupWindows() {
+        if Defaults[.showOnAllDisplays] {
             for (screen, window) in windows {
                 // Tear down the hosted ContentView before dropping the window
                 // (`.onDisappear` is unreliable for borderless panels).
@@ -778,7 +782,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.showOnAllDisplaysChanged, object: nil, queue: nil
         ) { [weak self] _ in
             guard let self = self else { return }
-            self.cleanupWindows(shouldInvert: true)
+            // Clean up windows from BOTH modes since the setting has already changed.
+            // The old cleanupWindows() only cleaned the current mode's windows.
+            for (screen, window) in self.windows {
+                self.viewModels[screen]?.onViewTeardown?()
+                self.viewModels[screen]?.onViewTeardown = nil
+                window.close()
+                NotchSpaceManager.shared.notchSpace.windows.remove(window)
+            }
+            self.windows.removeAll()
+            self.viewModels.removeAll()
+            if let window = self.window {
+                self.vm.onViewTeardown?()
+                self.vm.onViewTeardown = nil
+                window.close()
+                NotchSpaceManager.shared.notchSpace.windows.remove(window)
+                self.window = nil
+            }
 
             if !Defaults[.showOnAllDisplays] {
                 let viewModel = self.vm
@@ -1174,10 +1194,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         previousScreens = currentScreens
         
         if screensChanged {
-            DispatchQueue.main.async { [weak self] in
+            // Debounce to coalesce multiple rapid notifications during display reconnection
+            screenChangeDebounceWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
                 self?.cleanupWindows()
-                self?.adjustWindowPosition()
+                self?.adjustWindowPosition(changeAlpha: true)
             }
+            screenChangeDebounceWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
         }
     }
     
@@ -1207,6 +1231,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 
                 if let window = windows[screen], let viewModel = viewModels[screen] {
                     positionWindow(window, on: screen, changeAlpha: changeAlpha)
+                    window.orderFrontRegardless()
                     
                     if viewModel.notchState == .closed {
                         viewModel.close()
@@ -1240,6 +1265,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             
             if let window = window {
                 positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
+                window.orderFrontRegardless()
                 
                 if vm.notchState == .closed {
                     vm.close()
