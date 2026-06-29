@@ -124,8 +124,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Debouncing mechanism for window size updates
     private var windowSizeUpdateWorkItem: DispatchWorkItem?
     
-    // Debouncing for screen configuration changes (display connect/disconnect)
-    private var screenChangeDebounceWorkItem: DispatchWorkItem?
+
 //    let calendarManager = CalendarManager.shared
 //    let webcamManager = WebcamManager.shared
 //    var closeNotchWorkItem: DispatchWorkItem?
@@ -247,7 +246,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Cancel any pending window size updates
         windowSizeUpdateWorkItem?.cancel()
-        screenChangeDebounceWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
         extensionXPCServiceHost.stop()
         extensionRPCServer.stop()
@@ -1194,14 +1192,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         previousScreens = currentScreens
         
         if screensChanged {
-            // Debounce to coalesce multiple rapid notifications during display reconnection
-            screenChangeDebounceWorkItem?.cancel()
-            let workItem = DispatchWorkItem { [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.cleanupWindows()
                 self?.adjustWindowPosition(changeAlpha: true)
             }
-            screenChangeDebounceWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
         }
     }
     
@@ -1232,6 +1226,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if let window = windows[screen], let viewModel = viewModels[screen] {
                     positionWindow(window, on: screen, changeAlpha: changeAlpha)
                     window.orderFrontRegardless()
+                    window.display()
+                    window.invalidateShadow()
                     
                     if viewModel.notchState == .closed {
                         viewModel.close()
@@ -1266,6 +1262,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let window = window {
                 positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
                 window.orderFrontRegardless()
+                window.display()
+                window.invalidateShadow()
                 
                 if vm.notchState == .closed {
                     vm.close()
