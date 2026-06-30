@@ -41,7 +41,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
     /// invokes it before closing the panel since `.onDisappear` is unreliable for
     /// borderless panels, preventing leaked hover-polling Tasks from accumulating.
     var onViewTeardown: (() -> Void)?
-    
+
     @Published var hideOnClosed: Bool = true
     @Published var isHoveringCalendar: Bool = false
     @Published var isBatteryPopoverActive: Bool = false
@@ -103,7 +103,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             coordinator.currentView = .notes
         }
     }
-    
+
     let webcamManager = WebcamManager.shared
     @Published var isCameraExpanded: Bool = false
     @Published var isRequestingAuthorization: Bool = false
@@ -112,7 +112,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
 
     @Published var notchSize: CGSize = getClosedNotchSize()
     @Published var closedNotchSize: CGSize = getClosedNotchSize()
-    
+
     @MainActor
     deinit {
         destroy()
@@ -129,7 +129,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         animation = animationLibrary.animation
 
         super.init()
-        
+
         self.screen = screen
         notchSize = getClosedNotchSize(screen: screen)
         closedNotchSize = notchSize
@@ -140,7 +140,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             }
             .assign(to: \.anyDropZoneTargeting, on: self)
             .store(in: &cancellables)
-        
+
         setupDetectorObserver()
 
         ReminderLiveActivityManager.shared.$activeWindowReminders
@@ -280,7 +280,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             )
         }
     }
-    
+
     private func setupDetectorObserver() {
         // 1) Publisher for the user’s fullscreen detection setting
         let enabledPublisher = Defaults
@@ -310,24 +310,29 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
+
     // Computed property for effective notch height
     var effectiveClosedNotchHeight: CGFloat {
+        // If the stored screen name no longer matches (e.g. after a display
+        // reconnect the identifier changed), fall back to the main screen so
+        // the notch does not collapse to zero height and become unresponsive.
         let currentScreen = NSScreen.screens.first { $0.localizedName == screen }
-        let noNotchAndFullscreen = hideOnClosed && (currentScreen?.safeAreaInsets.top ?? 0 <= 0 || currentScreen == nil)
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let noNotchAndFullscreen = hideOnClosed && (currentScreen?.safeAreaInsets.top ?? 0 <= 0)
         return noNotchAndFullscreen ? 0 : closedNotchSize.height
     }
 
     func isMouseHovering(position: NSPoint = NSEvent.mouseLocation) -> Bool {
         let screenFrame = getScreenFrame(screen)
         if let frame = screenFrame {
-            
+
             let baseY = frame.maxY - notchSize.height
             let baseX = frame.midX - notchSize.width / 2
-            
+
             return position.y >= baseY && position.x >= baseX && position.x <= baseX + notchSize.width
         }
-        
+
         return false
     }
 
@@ -356,7 +361,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         MusicManager.shared.forceUpdate()
         focusClipboardTabIfNeeded()
     }
-    
+
     private func calculateDynamicNotchSize() -> CGSize {
         let baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize : openNotchSize
         var adjustedSize = baseSize
@@ -415,7 +420,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             }
         }
     }
-    
+
     func toggleCameraPreview() {
         if isRequestingAuthorization {
             return
