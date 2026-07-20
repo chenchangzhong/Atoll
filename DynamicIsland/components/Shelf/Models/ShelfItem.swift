@@ -68,19 +68,82 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var kind: ShelfItemKind
     var isTemporary: Bool
-    init(id: UUID = UUID(), kind: ShelfItemKind, isTemporary: Bool = false) {
+    // Cached display name and icon to avoid blocking on bookmark resolution
+    var cachedDisplayName: String?
+    var cachedIconData: Data?
+    init(id: UUID = UUID(), kind: ShelfItemKind, isTemporary: Bool = false, cachedDisplayName: String? = nil, cachedIconData: Data? = nil) {
         self.id = id
         self.kind = kind
         self.isTemporary = isTemporary
+        self.cachedDisplayName = cachedDisplayName
+        self.cachedIconData = cachedIconData
     }
     
     var displayName: String {
         switch kind {
         case .file(let bookmarkData):
-            let bookmark = Bookmark(data: bookmarkData)
-            guard let resolvedURL = bookmark.resolveURL() else { return "" }
-            
-            // Check for stored data files (text blocks, weblocs, etc.) to provide friendly names
+            if let cached = cachedDisplayName, !cached.isEmpty {
+                return cached
+            }
+            // No synchronous fallback - return empty string if not cached
+            // Async resolution should be done via loadDisplayName()
+            return ""
+        case .text(let string):
+            return string.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .link(let url):
+            let s = url.absoluteString
+            if s.hasPrefix("https://") {
+                return String(s.dropFirst("https://".count))
+            } else if s.hasPrefix("http://") {
+                return String(s.dropFirst("http://".count))
+            } else {
+                return s
+            }
+        }
+    }
+    
+    var fileURL: URL? {
+        guard case .file = kind else { return nil }
+        // Don't resolve synchronously - use async method from ShelfStateViewModel
+        return nil
+    }
+    
+    var URL: URL? {
+        if case let .file(bookmark) = kind { 
+            // Don't resolve synchronously
+            return nil
+        } else if case let .link(url) = kind { 
+            return url 
+        } else { 
+            return nil 
+        }
+    }
+    
+    var icon: NSImage {
+        if let cachedData = cachedIconData, let cachedImage = NSImage(data: cachedData) {
+            return cachedImage
+        }
+        guard case .file = kind else {
+            return Self.thumbnailSymbolImage(systemName: kind.iconSymbolName) ?? NSImage()
+        }
+        // Return generic file icon instead of blocking on bookmark resolution
+        return NSWorkspace.shared.icon(forFileType: "public.item")
+    }
+    
+    // Async methods to load display name and icon without blocking
+    func loadDisplayName() async -> String {
+        // If we have a cached name, return it
+        if let cached = cachedDisplayName, !cached.isEmpty {
+            return cached
+        }
+        // Otherwise try to resolve asynchronously
+        guard case .file(let bookmarkData) = kind else { return displayName }
+        let bookmark = Bookmark(data: bookmarkData)
+        let (url, _) = await bookmark.resolveAsync()
+        guard let resolvedURL = url else { return "" }
+        
+        // Perform file I/O off the main actor
+        return await Task.detached { [resolvedURL] in
             if resolvedURL.pathExtension.lowercased() == "json" && resolvedURL.path.contains("TextBlocks") {
                 do {
                     let data = try Data(contentsOf: resolvedURL)
@@ -104,7 +167,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
                         return textData.displayTitle
                     }
                 } catch {
-                    // Fall through to default naming
+                    // Fall through
                 }
             } else if resolvedURL.pathExtension.lowercased() == "webloc" && resolvedURL.path.contains("WebLocs") {
                 do {
@@ -115,57 +178,41 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
                         return title ?? urlString
                     }
                 } catch {
-                    // Fall through to default naming
+                    // Fall through
                 }
             }
             return (try? resolvedURL.resourceValues(forKeys: [.localizedNameKey]).localizedName) ?? resolvedURL.lastPathComponent
-        case .text(let string):
-            return string.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .link(let url):
-            let s = url.absoluteString
-            if s.hasPrefix("https://") {
-                return String(s.dropFirst("https://".count))
-            } else if s.hasPrefix("http://") {
-                return String(s.dropFirst("http://".count))
-            } else {
-                return s
-            }
+        }.value
+    }
+    
+    func loadIcon() async -> NSImage {
+        if let cachedData = cachedIconData, let cachedImage = NSImage(data: cachedData) {
+            return cachedImage
         }
-    }
-    
-    var fileURL: URL? {
-        guard case .file = kind else { return nil }
-        return ShelfStateViewModel.shared.resolveFileURL(for: self)
-    }
-    
-    var URL: URL? {
-        if case let .file(bookmark) = kind { return resolvedContext(for: bookmark)?.url }
-        else if case let .link(url) = kind { return url }
-        else { return nil }
-    }
-    
-    var icon: NSImage {
-        guard case .file = kind else {
+        guard case .file(let bookmarkData) = kind else {
             return Self.thumbnailSymbolImage(systemName: kind.iconSymbolName) ?? NSImage()
         }
-        if let resolvedURL = ShelfStateViewModel.shared.resolveFileURL(for: self) {
-            return NSWorkspace.shared.icon(forFile: resolvedURL.path)
+        let bookmark = Bookmark(data: bookmarkData)
+        let (url, _) = await bookmark.resolveAsync()
+        guard let resolvedURL = url else {
+            return NSWorkspace.shared.icon(forFileType: "public.item")
         }
-        return NSImage()
+        
+        // Perform icon loading off the main actor
+        return await Task.detached { [resolvedURL] in
+            return NSWorkspace.shared.icon(forFile: resolvedURL.path)
+        }.value
     }
-    
 
     func cleanupStoredData() {
-        guard case let .file(bookmark) = kind,
-              let context = resolvedContext(for: bookmark) else { return }
+        // Only resolve bookmark for temporary items - persisted items don't need cleanup
+        guard isTemporary, case let .file(bookmark) = kind,
+              let context = resolvedContextSync(for: bookmark) else { return }
         
         let url = context.url
         
         // Handle temporary files
-        if isTemporary {
-            TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: url)
-            return
-        }
+        TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: url)
     }
 }
 
@@ -206,7 +253,7 @@ extension ShelfItem {
     var identityKey: String {
         switch kind {
         case .file(let bookmark):
-            if let url = resolvedContext(for: bookmark)?.url {
+            if let url = resolvedContextSync(for: bookmark)?.url {
                 return "file://" + url.standardizedFileURL.path
             }
             return "file://missing/" + bookmark.base64EncodedString()
@@ -233,11 +280,24 @@ private extension ShelfItemKind {
 }
 
 private extension ShelfItem {
-    func resolvedContext(for bookmarkData: Data) -> (url: URL, bookmark: Data)? {
+    func resolvedContext(for bookmarkData: Data) async -> (url: URL, bookmark: Data)? {
         let bookmark = Bookmark(data: bookmarkData)
-        if let url = bookmark.resolveURL() {
-            return (url, bookmark.refreshedData ?? bookmarkData)
+        let result = await bookmark.resolveAsync()
+        if let url = result.url {
+            return (url, result.refreshedData ?? bookmarkData)
         }
         return nil
+    }
+
+    // Sync wrapper for backward compatibility
+    func resolvedContextSync(for bookmarkData: Data) -> (url: URL, bookmark: Data)? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: (url: URL, bookmark: Data)?
+        Task.detached {
+            result = await resolvedContext(for: bookmarkData)
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 5.0)
+        return result
     }
 }

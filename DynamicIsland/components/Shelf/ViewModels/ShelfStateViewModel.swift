@@ -41,6 +41,10 @@ final class ShelfStateViewModel: ObservableObject {
     // Queue for deferred bookmark updates to avoid publishing during view updates
     private var pendingBookmarkUpdates: [ShelfItem.ID: Data] = [:]
     private var updateTask: Task<Void, Never>?
+    
+    // Cache for URL-to-item mapping to avoid resolving all bookmarks for lookup
+    private var urlToItemCache: [String: ShelfItem.ID] = [:]
+    private var urlCacheInvalidated = true
 
     private init() {
         items = ShelfPersistenceService.shared.load()
@@ -62,6 +66,7 @@ final class ShelfStateViewModel: ObservableObject {
             }
         }
         items = merged
+        invalidateURLCache()
         if !addedIDs.isEmpty {
             ExtensionRPCServer.shared.notifyShelfItemsChanged(itemIDs: addedIDs, action: "added")
         }
@@ -70,6 +75,7 @@ final class ShelfStateViewModel: ObservableObject {
     func remove(_ item: ShelfItem) {
         item.cleanupStoredData()
         items.removeAll { $0.id == item.id }
+        invalidateURLCache()
         ExtensionRPCServer.shared.notifyShelfItemsChanged(itemIDs: [item.id.uuidString], action: "removed")
     }
 
@@ -78,6 +84,7 @@ final class ShelfStateViewModel: ObservableObject {
         if case .file = items[idx].kind {
             items[idx].kind = .file(bookmark: bookmark)
         }
+        invalidateURLCache()
     }
 
     private func scheduleDeferredBookmarkUpdate(for item: ShelfItem, bookmark: Data) {
@@ -135,34 +142,102 @@ final class ShelfStateViewModel: ObservableObject {
         }
     }
 
-
-    func resolveFileURL(for item: ShelfItem) -> URL? {
+    // Async version that resolves bookmark on background thread
+    func resolveFileURLAsync(for item: ShelfItem) async -> URL? {
         guard case .file(let bookmarkData) = item.kind else { return nil }
         let bookmark = Bookmark(data: bookmarkData)
-        let result = bookmark.resolve()
+        let result = await bookmark.resolveAsync()
         if let refreshed = result.refreshedData, refreshed != bookmarkData {
             NSLog("Bookmark for \(item) stale; refreshing")
-            scheduleDeferredBookmarkUpdate(for: item, bookmark: refreshed)
+            await MainActor.run { scheduleDeferredBookmarkUpdate(for: item, bookmark: refreshed) }
         }
         return result.url
     }
 
-    func resolveAndUpdateBookmark(for item: ShelfItem) -> URL? {
+    // Async version for user-initiated actions
+    func resolveAndUpdateBookmarkAsync(for item: ShelfItem) async -> URL? {
         guard case .file(let bookmarkData) = item.kind else { return nil }
         let bookmark = Bookmark(data: bookmarkData)
-        let result = bookmark.resolve()
+        let result = await bookmark.resolveAsync()
         if let refreshed = result.refreshedData, refreshed != bookmarkData {
             NSLog("Bookmark for \(item) stale; refreshing")
-            updateBookmark(for: item, bookmark: refreshed)
+            await MainActor.run { updateBookmark(for: item, bookmark: refreshed) }
         }
         return result.url
     }
 
-    func resolveFileURLs(for items: [ShelfItem]) -> [URL] {
+    // Find item by URL using cached mapping (avoids resolving all bookmarks)
+    func findItem(by url: URL) async -> ShelfItem? {
+        let path = url.standardizedFileURL.path
+        if urlCacheInvalidated {
+            await rebuildURLCache()
+        }
+        if let itemID = urlToItemCache[path],
+           let idx = items.firstIndex(where: { $0.id == itemID }) {
+            return items[idx]
+        }
+        // Fallback: async resolution for cache miss
+        for itm in items {
+            if case .file = itm.kind {
+                if let resolved = await resolveFileURLAsync(for: itm),
+                   resolved.standardizedFileURL.path == path {
+                    return itm
+                }
+            }
+        }
+        return nil
+    }
+
+    // Sync wrapper for backward compatibility
+    func findItemSync(by url: URL) -> ShelfItem? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: ShelfItem?
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            result = await self.findItem(by: url)
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 5.0)
+        return result
+    }
+    
+    private func rebuildURLCache() async {
+        urlToItemCache.removeAll()
+        for item in items {
+            if case .file(let bookmarkData) = item.kind {
+                let bookmark = Bookmark(data: bookmarkData)
+                let result = await bookmark.resolveAsync()
+                if let url = result.url {
+                    urlToItemCache[url.standardizedFileURL.path] = item.id
+                }
+            }
+        }
+        urlCacheInvalidated = false
+    }
+    
+    private func invalidateURLCache() {
+        urlCacheInvalidated = true
+    }
+
+    // Async version - resolves file URLs without blocking
+    func resolveFileURLsAsync(for items: [ShelfItem]) async -> [URL] {
         var urls: [URL] = []
         for it in items {
-            if let u = resolveFileURL(for: it) { urls.append(u) }
+            if let u = await resolveFileURLAsync(for: it) { urls.append(u) }
         }
         return urls
+    }
+
+    // Sync wrapper for backward compatibility - resolves on background thread with timeout
+    func resolveFileURLs(for items: [ShelfItem]) -> [URL] {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: [URL] = []
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            result = await self.resolveFileURLsAsync(for: items)
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 10.0)
+        return result
     }
 }

@@ -41,7 +41,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
     /// invokes it before closing the panel since `.onDisappear` is unreliable for
     /// borderless panels, preventing leaked hover-polling Tasks from accumulating.
     var onViewTeardown: (() -> Void)?
-
+    
     @Published var hideOnClosed: Bool = true
     @Published var isHoveringCalendar: Bool = false
     @Published var isBatteryPopoverActive: Bool = false
@@ -103,7 +103,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             coordinator.currentView = .notes
         }
     }
-
+    
     let webcamManager = WebcamManager.shared
     @Published var isCameraExpanded: Bool = false
     @Published var isRequestingAuthorization: Bool = false
@@ -112,7 +112,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
 
     @Published var notchSize: CGSize = getClosedNotchSize()
     @Published var closedNotchSize: CGSize = getClosedNotchSize()
-
+    
     @MainActor
     deinit {
         destroy()
@@ -281,6 +281,23 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         }
     }
 
+    private func handleMinimalisticTimerHeightChange() {
+        guard Defaults[.enableMinimalisticUI] else { return }
+        guard notchState == .open else { return }
+        let updatedTarget = calculateDynamicNotchSize()
+        guard notchSize != updatedTarget else { return }
+        withAnimation(.smooth) {
+            notchSize = updatedTarget
+        }
+        if let delegate = AppDelegate.shared {
+            delegate.ensureWindowSize(
+                addShadowPadding(to: updatedTarget, isMinimalistic: Defaults[.enableMinimalisticUI]),
+                animated: true,
+                force: false
+            )
+        }
+    }
+
     private func setupDetectorObserver() {
         // 1) Publisher for the user’s fullscreen detection setting
         let enabledPublisher = Defaults
@@ -361,9 +378,9 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         MusicManager.shared.forceUpdate()
         focusClipboardTabIfNeeded()
     }
-
+    
     private func calculateDynamicNotchSize() -> CGSize {
-        let baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize : openNotchSize
+        let baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize(isDynamicIslandMode: shouldUseDynamicIslandMode(for: screen)) : openNotchSize
         var adjustedSize = baseSize
 
         if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
@@ -420,7 +437,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             }
         }
     }
-
+    
     func toggleCameraPreview() {
         if isRequestingAuthorization {
             return

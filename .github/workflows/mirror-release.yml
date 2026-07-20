@@ -1,6 +1,14 @@
 name: Mirror Release To Organization
 
 on:
+  push:
+    branches:
+      - main
+      - master
+      - dev
+      - nightly
+      - alpha
+      - beta
   release:
     types: [published]
 
@@ -11,11 +19,20 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
 
+    # Skip CI-generated commits (appcast updates, changelog archives)
+    if: >-
+      github.event_name == 'release' ||
+      (
+        !contains(github.event.head_commit.message, 'ci: update appcast') &&
+        !contains(github.event.head_commit.message, 'ci: archive changelog')
+      )
+
     steps:
       - name: Checkout source repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       ####################################################################
       # Sync Git repository
@@ -48,6 +65,7 @@ jobs:
       ####################################################################
 
       - name: Download release assets
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -63,6 +81,7 @@ jobs:
       ####################################################################
 
       - name: Save release notes
+        if: github.event_name == 'release'
         run: |
           cat > release_notes.md <<'EOF'
           ${{ github.event.release.body }}
@@ -73,10 +92,17 @@ jobs:
       ####################################################################
 
       - name: Create release if missing
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
+
+          # Determine if this is a pre-release
+          PRERELEASE_FLAG=""
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
 
           if gh release view "$TAG" \
               --repo Atoll-Labs/Atoll >/dev/null 2>&1; then
@@ -88,11 +114,13 @@ jobs:
             gh release create "$TAG" \
               --repo Atoll-Labs/Atoll \
               --title "${{ github.event.release.name }}" \
-              --notes-file release_notes.md
+              --notes-file release_notes.md \
+              $PRERELEASE_FLAG
 
           fi
 
       - name: Update release metadata
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |
@@ -107,6 +135,7 @@ jobs:
       ####################################################################
 
       - name: Upload assets
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.ORG_REPO_TOKEN }}
         run: |

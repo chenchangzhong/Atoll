@@ -450,7 +450,7 @@ struct SettingsView: View {
     private func sidebarRow(for tab: SettingsTab) -> some View {
         HStack(spacing: 10) {
             sidebarIcon(for: tab)
-            Text(tab.title)
+            Text(LocalizedStringKey(tab.title))
             if tab == .downloads {
                 Spacer()
                 Text("BETA")
@@ -627,10 +627,10 @@ struct SettingsView: View {
                                 }
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(suggestion.title)
+                                Text(LocalizedStringKey(suggestion.title))
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(Color.primary)
-                                Text(suggestion.tab.title)
+                                Text(LocalizedStringKey(suggestion.tab.title))
                                     .font(.system(size: 11))
                                     .foregroundStyle(Color.secondary)
                             }
@@ -886,6 +886,10 @@ struct SettingsView: View {
 
             // Stats
             SettingsSearchEntry(tab: .stats, title: "Enable system stats monitoring", keywords: ["stats", "monitoring"], highlightID: SettingsTab.stats.highlightID(for: "Enable system stats monitoring")),
+            SettingsSearchEntry(tab: .stats, title: "Enable LLM Usage Monitor", keywords: ["llm", "usage", "ai", "monitor"], highlightID: SettingsTab.stats.highlightID(for: "Enable LLM Usage Monitor")),
+            SettingsSearchEntry(tab: .stats, title: "Claude Provider", keywords: ["llm", "claude", "provider", "toggle"], highlightID: SettingsTab.stats.highlightID(for: "Claude Provider")),
+            SettingsSearchEntry(tab: .stats, title: "Codex Provider", keywords: ["llm", "codex", "provider", "toggle"], highlightID: SettingsTab.stats.highlightID(for: "Codex Provider")),
+            SettingsSearchEntry(tab: .stats, title: "Cursor Provider", keywords: ["llm", "cursor", "provider", "toggle"], highlightID: SettingsTab.stats.highlightID(for: "Cursor Provider")),
             SettingsSearchEntry(tab: .stats, title: "Stop monitoring after closing the notch", keywords: ["stats", "auto stop"], highlightID: SettingsTab.stats.highlightID(for: "Stop monitoring after closing the notch")),
             SettingsSearchEntry(tab: .stats, title: "CPU Usage", keywords: ["cpu", "graph"], highlightID: SettingsTab.stats.highlightID(for: "CPU Usage")),
             SettingsSearchEntry(tab: .stats, title: "Temperature unit", keywords: ["cpu", "temperature", "celsius", "fahrenheit"], highlightID: SettingsTab.stats.highlightID(for: "Temperature unit")),
@@ -1045,12 +1049,15 @@ struct GeneralSettings: View {
     @Default(.nonNotchHeight) var nonNotchHeight
     @Default(.nonNotchHeightMode) var nonNotchHeightMode
     @Default(.notchHeight) var notchHeight
+    @Default(.closedNotchWidth) var closedNotchWidth
+    @Default(.customizePhysicalNotchWidth) var customizePhysicalNotchWidth
     @Default(.notchHeightMode) var notchHeightMode
     @Default(.showOnAllDisplays) var showOnAllDisplays
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
     @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
     @Default(.enableMinimalisticUI) var enableMinimalisticUI
+    @Default(.showMinimalisticBatteryIndicator) var showMinimalisticBatteryIndicator
     @Default(.enableHorizontalMusicGestures) var enableHorizontalMusicGestures
     @Default(.musicGestureBehavior) var musicGestureBehavior
     @Default(.reverseSwipeGestures) var reverseSwipeGestures
@@ -1076,10 +1083,16 @@ struct GeneralSettings: View {
                 }
                 .settingsHighlight(id: highlightID("Enable Minimalistic UI"))
 
+                Defaults.Toggle(key: .showMinimalisticBatteryIndicator) {
+                    Text("Show battery indicator")
+                }
+                .disabled(!enableMinimalisticUI)
+                .settingsHighlight(id: highlightID("Show battery indicator in Minimalistic UI"))
+
                 Defaults.Toggle(key: .showBatteryPercentInside) {
                     Text("Show battery percentage inside icon")
                 }
-                .disabled(!enableMinimalisticUI)
+                .disabled(!enableMinimalisticUI || !Defaults[.showMinimalisticBatteryIndicator])
                 .settingsHighlight(id: highlightID("Show battery percentage inside icon"))
             } header: {
                 Text("UI Mode")
@@ -1570,7 +1583,7 @@ struct Charge: View {
             } else {
                 ContentUnavailableView {
                     VStack(spacing: 16) {
-                        Image("battery.100percent.slash")
+                        Image(systemName: "battery.100percent.slash")
                             .font(.title)
                         Text("Battery settings and informations are only available on MacBooks")
                             .font(.title3)
@@ -2516,6 +2529,10 @@ private struct DevicesSettingsView: View {
                     Text("Scroll device name in HUD")
                 }
                 .settingsHighlight(id: highlightID("Scroll device name in HUD"))
+                Defaults.Toggle(key: .showAirPodsListeningModeChanges) {
+                    Text("Show AirPods listening mode changes")
+                }
+                .settingsHighlight(id: highlightID("Show AirPods listening mode changes"))
                 VStack(alignment: .leading, spacing: 12) {
                     Text("HUD icon style")
                         .font(.system(size: 13, weight: .semibold))
@@ -2752,9 +2769,12 @@ struct Media: View {
     @Default(.lockScreenMusicFullscreenArtworkEnabled) private var lockScreenMusicFullscreenArtworkEnabled
     @Default(.showStandardMediaControls) private var showStandardMediaControls
     @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
+    @Default(.visualizerBarCount) private var visualizerBarCount
+    @Default(.enableWaveformScrubber) private var enableWaveformScrubber
+    @Default(.colorExtractionMode) private var colorExtractionMode
     @Default(.parallaxEffectIntensity) private var parallaxEffectIntensity
 
-
+    
     @ObservedObject private var musicManager = MusicManager.shared
 
     private var isAppleMusicActive: Bool {
@@ -2774,7 +2794,7 @@ struct Media: View {
             Section {
                 Picker("Music Source", selection: $mediaController) {
                     ForEach(availableMediaControllers) { controller in
-                        Text(controller.rawValue).tag(controller)
+                        Text(controller.localizedName).tag(controller)
                     }
                 }
                 .onChange(of: mediaController) { _, _ in
@@ -2913,7 +2933,7 @@ struct Media: View {
                 }
                 .settingsHighlight(id: highlightID("Show live canvas in Dynamic Island"))
                 .help("Replaces the artwork tile with the live canvas when the current app provides one, and reuses that moving canvas for the surrounding lighting effect.")
-
+                
                 //Parallax Effect Intensity to control how much parallax is wanted
                 Slider(value: $parallaxEffectIntensity, in: 0...12, step: 1.0) {
                     HStack {
@@ -2924,10 +2944,10 @@ struct Media: View {
                     }
                 }
                 .settingsHighlight(id: highlightID("Enable album art parallax effect"))
-
+                
                 Picker("Sneak Peek Style", selection: $sneakPeekStyles){
                     ForEach(SneakPeekStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+                        Text(style.localizedName).tag(style)
                     }
                 }
                 .disabled(!enableSneakPeek)
@@ -2943,7 +2963,7 @@ struct Media: View {
                         }
                     }
                 }
-
+                
                 Defaults.Toggle(key: .showSongMetadataInClosedNotch) {
                     Text("Show song title and artist on non-notch displays")
                 }
@@ -2960,6 +2980,19 @@ struct Media: View {
                     }
                 }
                 .settingsHighlight(id: highlightID("Enable real-time waveform"))
+                
+                Picker("Visualizer candles", selection: $visualizerBarCount) {
+                    Text("4").tag(4)
+                    Text("5").tag(5)
+                    Text("6").tag(6)
+                }
+                
+                Picker("Color extraction", selection: $colorExtractionMode) {
+                    Text("Legacy").tag(ColorExtractionMode.legacy)
+                    Text("Vibrant").tag(ColorExtractionMode.vibrant)
+                }
+                
+                Toggle("Scrubbable real-time waveform", isOn: $enableWaveformScrubber)
             } header: {
                 Text("Music Visualizer")
             } footer: {
@@ -3257,7 +3290,7 @@ struct CalendarSettings: View {
 
                     Picker("Chip color", selection: $lockScreenReminderChipStyle) {
                         ForEach(LockScreenReminderChipStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -3401,7 +3434,7 @@ struct CalendarSettings: View {
                     .disabled(!lockScreenShowCalendarEvent)
                     .settingsHighlight(id: highlightID("Show start time after event begins"))
                 }
-
+                
                 // MARK: - Third-party Calendar Integration
                 Section {
                     Defaults.Toggle(key: .enableThirdPartyCalendarApp) {
@@ -3413,7 +3446,7 @@ struct CalendarSettings: View {
                         }
                     }
                     .settingsHighlight(id: highlightID("Enable third-party calendar app launch"))
-
+                    
                     if enableThirdPartyCalendarApp {
                         Picker("Calendar App", selection: $selectedCalendarApp) {
                             ForEach(ThirdPartyCalendarApp.allCases) { app in
@@ -3429,7 +3462,7 @@ struct CalendarSettings: View {
                             }
                         }
                         .settingsHighlight(id: highlightID("Calendar App"))
-
+                        
                         if selectedCalendarApp == .fantastical {
                             Picker("Default View", selection: $fantasticalDefaultView) {
                                 ForEach(FantasticalViewStyle.allCases, id: \.self) { style in
@@ -3525,6 +3558,7 @@ struct CalendarSettings: View {
 
 struct About: View {
     @State private var showBuildNumber: Bool = false
+    @Default(.updateChannel) var updateChannel
     let updaterController: SPUStandardUpdaterController
     @Environment(\.openWindow) var openWindow
     var body: some View {
@@ -3540,6 +3574,17 @@ struct About: View {
                     HStack {
                         Text("Version")
                         Spacer()
+
+                        // Channel badge
+                        Text(UpdateChannel.buildChannel.displayName)
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(UpdateChannel.buildChannel.badgeColor).opacity(0.2))
+                            .foregroundStyle(Color(UpdateChannel.buildChannel.badgeColor))
+                            .clipShape(Capsule())
+
                         if showBuildNumber {
                             Text("(\(Bundle.main.buildVersionNumber ?? ""))")
                                 .foregroundStyle(.secondary)
@@ -3566,9 +3611,10 @@ struct About: View {
                         VStack(spacing: 5) {
                             Image(systemName: "cup.and.saucer.fill")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(.primary)
+                                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                             Text("Donate")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(.primary)
                         }
                         .contentShape(Rectangle())
                     }
@@ -3581,30 +3627,71 @@ struct About: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 18)
+                                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                             Text("GitHub")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(.primary)
                         }
                         .contentShape(Rectangle())
                     }
                     Spacer(minLength: 0)
                 }
                 .buttonStyle(PlainButtonStyle())
+                
                 Text("Your support funds software development learning for students in 9th–12th grade.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.bottom, 5)
+
+                Section {
+                    ForEach(UpdateChannel.availableChannels) { channel in
+                        Button {
+                            updateChannel = channel
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: channel.badgeIcon)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color(channel.badgeColor))
+                                    .frame(width: 20, alignment: .center)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(channel.displayName)
+                                        .foregroundStyle(.primary)
+                                    Text(channel.description)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                if updateChannel == channel {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Color(channel.badgeColor))
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Text("Current build: \(UpdateChannel.buildChannel.displayName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Update channel")
+                }
+                VStack(spacing: 0) {
+                    Divider()
+                        .padding(.bottom, 5)
+                    Text("Made with ❤️ by Ebullioscopic")
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 7)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            VStack(spacing: 0) {
-                Divider()
-                Text("Made with ❤️ by Ebullioscopic")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 5)
-                    .padding(.bottom, 7)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 10)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .background(.regularMaterial)
         }
         .toolbar {
             //            Button("Welcome window") {
@@ -3893,7 +3980,7 @@ struct Shelf: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
+            
             if quickShareProvider == "LocalSend" {
                 LocalSendSettingsSection(highlightID: highlightID)
             }
@@ -3911,10 +3998,10 @@ struct Shelf: View {
 
 private struct LocalSendSettingsSection: View {
     let highlightID: (String) -> String
-
+    
     @Default(.localSendDevicePickerGlassMode) private var glassMode
     @Default(.localSendDevicePickerLiquidGlassVariant) private var liquidGlassVariant
-
+    
     var body: some View {
         Section {
             Picker("Device Picker Style", selection: $glassMode) {
@@ -3923,7 +4010,7 @@ private struct LocalSendSettingsSection: View {
                 }
             }
             .pickerStyle(.menu)
-
+            
             if glassMode == .customLiquid {
                 Picker("Liquid Glass Variant", selection: $liquidGlassVariant) {
                     ForEach(LiquidGlassVariant.allCases) { variant in
@@ -4185,6 +4272,8 @@ struct Appearance: View {
     @Default(.customAppIcons) private var customAppIcons
     @Default(.selectedAppIconID) private var selectedAppIconID
     @Default(.openNotchWidth) var openNotchWidth
+    @Default(.closedNotchWidth) var closedNotchWidth
+    @Default(.customizePhysicalNotchWidth) var customizePhysicalNotchWidth
     @Default(.enableMinimalisticUI) var enableMinimalisticUI
     @Default(.lockScreenGlassCustomizationMode) private var lockScreenGlassCustomizationMode
     @Default(.lockScreenGlassStyle) private var lockScreenGlassStyle
@@ -4214,12 +4303,12 @@ struct Appearance: View {
     }
 
     private var notchWidthRange: ClosedRange<Double> {
-        let minW = Double(standardBaseOpenNotchWidth)
+        let minW = Double(currentRecommendedMinimumNotchWidth())
         let maxW = min(900, Double(maxAllowedNotchWidth()))
         return minW...max(minW, maxW)
     }
     private var defaultOpenNotchWidth: CGFloat {
-        standardBaseOpenNotchWidth
+        currentRecommendedMinimumNotchWidth()
     }
 
     private func highlightID(_ title: String) -> String {
@@ -4308,14 +4397,14 @@ struct Appearance: View {
                 if #available(macOS 26.0, *) {
                     Picker("Material", selection: $lockScreenGlassStyle) {
                         ForEach(LockScreenGlassStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .settingsHighlight(id: highlightID("Lock screen material"))
                 } else {
                     Picker("Material", selection: $lockScreenGlassStyle) {
                         ForEach(LockScreenGlassStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .disabled(true)
@@ -4328,7 +4417,7 @@ struct Appearance: View {
                 if lockScreenGlassStyle == .liquid {
                     Picker("Lock screen glass mode", selection: $lockScreenGlassCustomizationMode) {
                         ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
+                            Text(mode.localizedName).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -4395,7 +4484,7 @@ struct Appearance: View {
                 .settingsHighlight(id: highlightID("Enable blur effect behind album art"))
                 Picker("Slider color", selection: $sliderColor) {
                     ForEach(SliderColorEnum.allCases, id: \.self) { option in
-                        Text(option.rawValue)
+                        Text(option.localizedName)
                     }
                 }
                 .settingsHighlight(id: highlightID("Slider color"))
@@ -4584,7 +4673,7 @@ struct Appearance: View {
                         .tag(MirrorShapeEnum.rectangle)
                 }
                 .settingsHighlight(id: highlightID("Mirror shape"))
-
+                
                 if webcamManager.cameraAvailable {
                     Picker("Mirror Camera", selection: $selectedCameraID) {
                         ForEach(webcamManager.availableCameras, id: \.uniqueID) { device in
@@ -4824,8 +4913,12 @@ struct Appearance: View {
     @ViewBuilder
     private func notchWidthControls() -> some View {
         Section {
-            let minWidth = standardBaseOpenNotchWidth
-            let dynamicRange = Double(minWidth)...900
+            let recommendedMin = currentRecommendedMinimumNotchWidth()
+            let tabCount = enabledStandardTabCount()
+            let dynamicRange = Double(recommendedMin)...900
+            
+            let closedRange = Double(80)...400
+            let minimalisticRange = Double(250)...600
 
             let widthBinding = Binding<Double>(
                 get: { Double(openNotchWidth) },
@@ -4837,8 +4930,44 @@ struct Appearance: View {
                     }
                 }
             )
+            
+            let closedWidthBinding = Binding<Double>(
+                get: { Double(closedNotchWidth) },
+                set: { newValue in
+                    let clamped = min(max(newValue, closedRange.lowerBound), closedRange.upperBound)
+                    let value = CGFloat(clamped)
+                    if closedNotchWidth != value {
+                        closedNotchWidth = value
+                        NotificationCenter.default.post(name: Notification.Name.notchHeightChanged, object: nil)
+                    }
+                }
+            )
 
             VStack(alignment: .leading, spacing: 10) {
+                Defaults.Toggle(key: .customizePhysicalNotchWidth) {
+                    Text("Customize physical notch width")
+                }
+                .onChange(of: customizePhysicalNotchWidth) {
+                    NotificationCenter.default.post(name: Notification.Name.notchHeightChanged, object: nil)
+                }
+                .settingsHighlight(id: highlightID("Customize physical notch width"))
+                
+                Slider(
+                    value: closedWidthBinding,
+                    in: closedRange,
+                    step: 5
+                ) {
+                    HStack {
+                        Text("Closed notch / pill width")
+                        Spacer()
+                        Text("\(Int(closedNotchWidth)) px")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .settingsHighlight(id: highlightID("Closed notch / pill width"))
+
+                Divider().padding(.vertical, 4)
+
                 Slider(
                     value: widthBinding,
                     in: dynamicRange,
@@ -4855,19 +4984,19 @@ struct Appearance: View {
                 .settingsHighlight(id: highlightID("Expanded notch width"))
 
                 HStack {
-                    Text("Min \(Int(minWidth)) px")
+                    Text("\(tabCount) tab\(tabCount == 1 ? "" : "s") enabled · min \(Int(recommendedMin)) px")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset Width") {
-                        openNotchWidth = minWidth
+                        openNotchWidth = recommendedMin
                     }
-                    .disabled(abs(openNotchWidth - minWidth) < 0.5)
+                    .disabled(abs(openNotchWidth - recommendedMin) < 0.5)
                     .buttonStyle(.bordered)
                 }
 
                 let description = enableMinimalisticUI
-                ? String(localized: "Width adjustments apply only to the standard notch layout. Disable Minimalistic UI to edit this value.")
+                ? String(localized: "Expanded width adjustments apply only to the standard notch layout. Disable Minimalistic UI to edit this value.")
                 : String(localized: "Recommended minimum width adjusts automatically based on the number of enabled tabs.")
 
                 Text(description)
@@ -5050,14 +5179,14 @@ struct LockScreenSettings: View {
                 if #available(macOS 26.0, *) {
                     Picker("Material", selection: $lockScreenGlassStyle) {
                         ForEach(LockScreenGlassStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .settingsHighlight(id: highlightID("Material"))
                 } else {
                     Picker("Material", selection: $lockScreenGlassStyle) {
                         ForEach(LockScreenGlassStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .disabled(true)
@@ -5070,7 +5199,7 @@ struct LockScreenSettings: View {
                 if lockScreenGlassStyle == .liquid {
                     Picker("Glass mode", selection: $lockScreenGlassCustomizationMode) {
                         ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
+                            Text(mode.localizedName).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -5183,7 +5312,7 @@ struct LockScreenSettings: View {
                 .settingsHighlight(id: highlightID("Show lock screen timer"))
                 Picker("Timer surface", selection: timerSurfaceBinding) {
                     ForEach(LockScreenTimerSurfaceMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Text(mode.localizedName).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -5194,7 +5323,7 @@ struct LockScreenSettings: View {
                 if timerGlassModeIsGlass {
                     Picker("Timer glass material", selection: $lockScreenTimerGlassStyle) {
                         ForEach(LockScreenGlassStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .disabled(!enableLockScreenTimerWidget)
@@ -5204,7 +5333,7 @@ struct LockScreenSettings: View {
                     if lockScreenTimerGlassStyle == .liquid {
                         Picker("Timer liquid mode", selection: $lockScreenTimerGlassCustomizationMode) {
                             ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
+                                Text(mode.localizedName).tag(mode)
                             }
                         }
                         .pickerStyle(.segmented)
@@ -5249,7 +5378,7 @@ struct LockScreenSettings: View {
                 if enableLockScreenWeatherWidget {
                     Picker("Layout", selection: $lockScreenWeatherWidgetStyle) {
                         ForEach(LockScreenWeatherWidgetStyle.allCases) { style in
-                            Text(style.rawValue).tag(style)
+                            Text(style.localizedName).tag(style)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -5265,7 +5394,7 @@ struct LockScreenSettings: View {
 
                     Picker("Temperature unit", selection: $lockScreenWeatherTemperatureUnit) {
                         ForEach(LockScreenWeatherTemperatureUnit.allCases) { unit in
-                            Text(unit.rawValue).tag(unit)
+                            Text(unit.localizedName).tag(unit)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -5324,7 +5453,7 @@ struct LockScreenSettings: View {
 
                 Picker("Chip color", selection: $lockScreenReminderChipStyle) {
                     ForEach(LockScreenReminderChipStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+                        Text(style.localizedName).tag(style)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -6393,7 +6522,7 @@ func comingSoonTag() -> some View {
 }
 
 func customBadge(text: String) -> some View {
-    Text(text)
+    Text(LocalizedStringKey(text))
         .foregroundStyle(.secondary)
         .font(.footnote.bold())
         .padding(.vertical, 3)
@@ -6561,7 +6690,7 @@ struct TimerSettings: View {
             .settingsHighlight(id: highlightID("Show lock screen timer widget"))
             Picker("Timer surface", selection: timerSurfaceBinding) {
                 ForEach(LockScreenTimerSurfaceMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+                    Text(mode.localizedName).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
@@ -6572,7 +6701,7 @@ struct TimerSettings: View {
             if timerGlassModeIsGlass {
                 Picker("Timer glass material", selection: $lockScreenTimerGlassStyle) {
                     ForEach(LockScreenGlassStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+                        Text(style.localizedName).tag(style)
                     }
                 }
                 .disabled(!enableLockScreenTimerWidget)
@@ -6582,7 +6711,7 @@ struct TimerSettings: View {
                 if lockScreenTimerGlassStyle == .liquid {
                     Picker("Timer liquid mode", selection: $lockScreenTimerGlassCustomizationMode) {
                         ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
+                            Text(mode.localizedName).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -6692,7 +6821,7 @@ struct TimerSettings: View {
 
             Picker("Progress style", selection: $progressStyle) {
                 ForEach(TimerProgressStyle.allCases) { style in
-                    Text(style.rawValue).tag(style)
+                    Text(style.localizedName).tag(style)
                 }
             }
             .pickerStyle(.segmented)
@@ -7047,6 +7176,7 @@ private struct TimerPresetComponentControl: View {
 struct StatsSettings: View {
     @ObservedObject var statsManager = StatsManager.shared
     @Default(.enableStatsFeature) var enableStatsFeature
+    @Default(.enableLLMUsageFeature) var enableLLMUsageFeature
     @Default(.statsStopWhenNotchCloses) var statsStopWhenNotchCloses
     @Default(.statsUpdateInterval) var statsUpdateInterval
     @Default(.showCpuGraph) var showCpuGraph
@@ -7093,13 +7223,44 @@ struct StatsSettings: View {
                     // Note: Smart monitoring will handle starting when switching to stats tab
                 }
 
+                Defaults.Toggle(key: .enableLLMUsageFeature) {
+                    Text("Enable LLM Usage Monitor")
+                }
+                .settingsHighlight(id: highlightID("Enable LLM Usage Monitor"))
+
             } header: {
                 Text("General")
             } footer: {
-                Text("When enabled, the Stats tab will display real-time system performance graphs. This feature requires system permissions and may use additional battery.")
+                Text("When enabled, the Stats tab will display real-time system performance graphs. This feature requires system permissions and may use additional battery. Enabling LLM Usage Monitor adds a Usage tab that tracks token usage and spend across your configured AI providers.")
                     .multilineTextAlignment(.trailing)
                     .foregroundStyle(.secondary)
                     .font(.caption)
+            }
+
+            if enableLLMUsageFeature {
+                Section {
+                    Defaults.Toggle(key: .enableClaudeProvider) {
+                        Text("Claude")
+                    }
+                    .settingsHighlight(id: highlightID("Claude Provider"))
+
+                    Defaults.Toggle(key: .enableCodexProvider) {
+                        Text("Codex")
+                    }
+                    .settingsHighlight(id: highlightID("Codex Provider"))
+
+                    Defaults.Toggle(key: .enableCursorProvider) {
+                        Text("Cursor")
+                    }
+                    .settingsHighlight(id: highlightID("Cursor Provider"))
+                } header: {
+                    Text("LLM Providers")
+                } footer: {
+                    Text("Choose which AI providers appear in the Usage tab.")
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
             }
 
             if enableStatsFeature {
@@ -7154,7 +7315,7 @@ struct StatsSettings: View {
                     if showCpuGraph {
                         Picker("Temperature unit", selection: $cpuTemperatureUnit) {
                             ForEach(LockScreenWeatherTemperatureUnit.allCases) { unit in
-                                Text(unit.rawValue).tag(unit)
+                                Text(unit.localizedName).tag(unit)
                             }
                         }
                         .pickerStyle(.segmented)
@@ -7481,32 +7642,12 @@ struct ScreenAssistantSettings: View {
     @ObservedObject var screenAssistantManager = ScreenAssistantManager.shared
     @Default(.enableScreenAssistant) var enableScreenAssistant
     @Default(.screenAssistantDisplayMode) var screenAssistantDisplayMode
-    @Default(.selectedAIProvider) var selectedAIProvider
     @Default(.geminiApiKey) var geminiApiKey
-    @Default(.openaiApiKey) var openaiApiKey
-    @Default(.claudeApiKey) var claudeApiKey
-    @Default(.groqApiKey) var groqApiKey
-    @Default(.customApiKey) var customApiKey
-    @Default(.customEndpoint) var customEndpoint
-    @Default(.localModelEndpoint) var localModelEndpoint
+    @State private var apiKeyText = ""
+    @State private var showingApiKey = false
 
     private func highlightID(_ title: String) -> String {
         SettingsTab.screenAssistant.highlightID(for: title)
-    }
-
-    private var currentProviderName: String {
-        selectedAIProvider.displayName
-    }
-
-    private var currentApiKeyStatus: (isSet: Bool, label: String) {
-        switch selectedAIProvider {
-        case .gemini: return (!geminiApiKey.isEmpty, geminiApiKey.isEmpty ? "Not Set" : "••••••••")
-        case .openai: return (!openaiApiKey.isEmpty, openaiApiKey.isEmpty ? "Not Set" : "••••••••")
-        case .claude: return (!claudeApiKey.isEmpty, claudeApiKey.isEmpty ? "Not Set" : "••••••••")
-        case .groq: return (!groqApiKey.isEmpty, groqApiKey.isEmpty ? "Not Set" : "••••••••")
-        case .custom: return (!customEndpoint.isEmpty, customEndpoint.isEmpty ? "Not Set" : "Configured")
-        case .local: return (!localModelEndpoint.isEmpty, localModelEndpoint.isEmpty ? "Not Set" : "Configured")
-        }
     }
 
     var body: some View {
@@ -7525,20 +7666,54 @@ struct ScreenAssistantSettings: View {
             if enableScreenAssistant {
                 Section {
                     HStack {
-                        Text("AI Provider")
+                        Text("Gemini API Key")
                         Spacer()
-                        Text(currentProviderName)
-                            .foregroundColor(.secondary)
+                        if geminiApiKey.isEmpty {
+                            Text("Not Set")
+                                .foregroundColor(.red)
+                        } else {
+                            Text("••••••••")
+                                .foregroundColor(.green)
+                        }
+
+                        Button(showingApiKey ? "Hide" : (geminiApiKey.isEmpty ? "Set" : "Change")) {
+                            if showingApiKey {
+                                showingApiKey = false
+                                if !apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Defaults[.geminiApiKey] = apiKeyText
+                                }
+                                apiKeyText = ""
+                            } else {
+                                showingApiKey = true
+                                apiKeyText = geminiApiKey
+                            }
+                        }
                     }
 
-                    HStack {
-                        Text("API Key")
-                        Spacer()
-                        Text(currentApiKeyStatus.label)
-                            .foregroundColor(currentApiKeyStatus.isSet ? .green : .red)
+                    if showingApiKey {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SecureField("Enter your Gemini API Key", text: $apiKeyText)
+                                .textFieldStyle(.roundedBorder)
 
-                        Button("Configure") {
-                            ModelSelectionPanel.open()
+                            Text("Get your free API key from Google AI Studio")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            HStack {
+                                Button("Open Google AI Studio") {
+                                    NSWorkspace.shared.open(URL(string: "https://aistudio.google.com/app/apikey")!)
+                                }
+                                .buttonStyle(.link)
+
+                                Spacer()
+
+                                Button("Save") {
+                                    Defaults[.geminiApiKey] = apiKeyText
+                                    showingApiKey = false
+                                    apiKeyText = ""
+                                }
+                                .disabled(apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
                         }
                     }
 
@@ -7930,14 +8105,14 @@ struct CustomOSDSettings: View {
                                     previewType = .brightness
                                 }
                                 .buttonStyle(.bordered)
-
+                                
                                 Button("Backlight") {
                                     previewType = .backlight
                                 }
                                 .buttonStyle(.bordered)
                             }
                             .controlSize(.small)
-
+                            
                             Slider(value: $previewValue, in: 0...1)
                                 .frame(width: 160)
                         }
@@ -8001,21 +8176,21 @@ struct SettingsPermissionCallout: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon)
+            Label(LocalizedStringKey(title), systemImage: icon)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(iconColor)
 
-            Text(message)
+            Text(LocalizedStringKey(message))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
-                Button(requestButtonTitle) {
+                Button(LocalizedStringKey(requestButtonTitle)) {
                     requestAction()
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button(openSettingsButtonTitle) {
+                Button(LocalizedStringKey(openSettingsButtonTitle)) {
                     openSettingsAction()
                 }
                 .buttonStyle(.bordered)

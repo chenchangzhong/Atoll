@@ -55,7 +55,7 @@ struct ContentView: View {
     @ObservedObject var localSendService = LocalSendService.shared
     @State private var downloadManager = DownloadManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
-
+    
     @Default(.enableStatsFeature) var enableStatsFeature
     @Default(.showCpuGraph) var showCpuGraph
     @Default(.showMemoryGraph) var showMemoryGraph
@@ -84,7 +84,7 @@ struct ContentView: View {
     @Default(.externalDisplayStyle) var externalDisplayStyle
     @Default(.hideNonNotchUntilHover) var hideNonNotchUntilHover
     @Default(.terminalStickyMode) var terminalStickyMode
-
+    
     // Battery settings reactivity
     @Default(.showPowerStatusNotifications) var showPowerStatusNotifications
     @Default(.showChargingBatteryHUD) var showChargingBatteryHUD
@@ -93,29 +93,43 @@ struct ContentView: View {
     @Default(.showOnAllDisplays) var showOnAllDisplays
     @Default(.lowBatteryHUDStyle) var lowBatteryHUDStyle
     @Default(.fullBatteryHUDStyle) var fullBatteryHUDStyle
-
+    
     // Dynamic sizing based on view type and graph count with smooth transitions
     var dynamicNotchSize: CGSize {
-        let baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize : openNotchSize
-
+        let baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize(isDynamicIslandMode: isDynamicIslandMode) : openNotchSize
+        
         // When inline sneak peek is active in closed notch, use the wider inline width
         // so the outer maxWidth frame doesn't clip the expanded content
+        let airPodsListeningModeSneakActive = vm.notchState == .closed
+            && coordinator.sneakPeek.show
+            && coordinator.sneakPeek.type == .bluetoothAudio
+            && coordinator.sneakPeek.value < 0
+            && AirPodsListeningMode.fromHUDSymbol(coordinator.sneakPeek.icon) != nil
         let inlineSneakPeekActive = vm.notchState == .closed
-            && coordinator.expandingView.show
-            && (coordinator.expandingView.type == .music || coordinator.expandingView.type == .timer)
+            && (
+                coordinator.expandingView.show
+                    && (coordinator.expandingView.type == .music || coordinator.expandingView.type == .timer)
+                    && Defaults[.sneakPeekStyles] == .inline
+                || airPodsListeningModeSneakActive
+            )
             && Defaults[.enableSneakPeek]
-            && Defaults[.sneakPeekStyles] == .inline
         if inlineSneakPeekActive {
-            let inlineWidth: CGFloat = 460
+            let inlineWidth: CGFloat = airPodsListeningModeSneakActive
+                ? InlineHUD.airPodsListeningModeWidth(
+                    closedNotchWidth: vm.closedNotchSize.width,
+                    gestureProgress: gestureProgress,
+                    minimalistic: Defaults[.enableMinimalisticUI]
+                ) + notchHorizontalPadding * 2
+                : 460
             return CGSize(width: max(baseSize.width, inlineWidth), height: baseSize.height)
         }
-
+        
         // Handle battery HUD expansion sizing
-        if vm.notchState == .closed &&
-           coordinator.expandingView.show &&
+        if vm.notchState == .closed && 
+           coordinator.expandingView.show && 
            coordinator.expandingView.type == .battery &&
            isBatteryHUDVisibleOnCurrentScreen {
-
+            
             if let kind = batteryModel.activeTemporaryHUDKind {
                 let style: BatteryNotificationStyle = {
                     switch kind {
@@ -124,10 +138,10 @@ struct ContentView: View {
                     case .fullBattery: return Defaults[.fullBatteryHUDStyle]
                     }
                 }()
-
+                
                 var width = vm.closedNotchSize.width
                 var height = vm.effectiveClosedNotchHeight
-
+                
                 switch (kind, style) {
                 case (.charging, _), (.lowBattery, .compact), (.fullBattery, .compact):
                     width += 180
@@ -138,15 +152,15 @@ struct ContentView: View {
                     width += 80
                     height += 70
                 }
-
+                
                 return CGSize(width: width, height: height)
             }
         }
-
+        
         if coordinator.currentView == .timer {
             return CGSize(width: baseSize.width, height: 250) // Extra height for timer presets
         }
-
+        
         if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
             let preferredHeight = coordinator.notesLayoutState.preferredHeight
             let resolvedHeight = max(baseSize.height, preferredHeight)
@@ -173,21 +187,21 @@ struct ContentView: View {
            let preferredHeight = extensionMinimalisticPreferredHeight(baseSize: baseSize) {
             return CGSize(width: baseSize.width, height: preferredHeight)
         }
-
+        
         guard coordinator.currentView == .stats else {
             return baseSize
         }
-
+        
         let rows = statsRowCount()
         if rows <= 1 {
             return baseSize
         }
-
+        
         let additionalRows = max(rows - 1, 0)
         let extraHeight = CGFloat(additionalRows) * statsAdditionalRowHeight
         return CGSize(width: baseSize.width, height: baseSize.height + extraHeight)
     }
-
+    
 
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
@@ -248,14 +262,14 @@ struct ContentView: View {
     private var dynamicNotchResizeAnimation: Animation? {
         nil
     }
-
+    
     private let zeroHeightHoverPadding: CGFloat = 10
     private let statsAdditionalRowHeight: CGFloat = statsSecondRowContentHeight + statsGridSpacingHeight
     private let musicControlPauseGrace: TimeInterval = 5
     private let musicControlResumeDelay: TimeInterval = 0.24
 
     // MARK: - Tab switch direction for smooth transitions
-
+    
     private var tabSwitchTransition: AnyTransition {
         if coordinator.tabSwitchForward {
             return .asymmetric(
@@ -269,7 +283,7 @@ struct ContentView: View {
             )
         }
     }
-
+    
     private var standardMediaControlsActive: Bool {
         showStandardMediaControls && !enableMinimalisticUI
     }
@@ -335,7 +349,7 @@ struct ContentView: View {
                 .animation(.smooth(duration: 0.22))
         )
     }
-
+    
     // Use minimalistic corner radius ONLY when opened, keep normal when closed
     private var activeCornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) {
         if enableMinimalisticUI {
@@ -344,7 +358,7 @@ struct ContentView: View {
         }
         return cornerRadiusInsets
     }
-
+    
     private var currentShadowPadding: CGFloat {
         notchShadowPaddingValue(isMinimalistic: enableMinimalisticUI)
     }
@@ -397,14 +411,14 @@ struct ContentView: View {
     private var shouldUseHiddenEdgeHoverPolling: Bool {
         shouldHideUntilHover && !lockScreenManager.isLocked
     }
-
+    
     /// Whether the LocalSend live activity should be shown
     private var localSendLiveActivityActive: Bool {
-        localSendService.isSending ||
+        localSendService.isSending || 
         localSendService.transferState == .completed ||
         isLocalSendFailedOrRejected
     }
-
+    
     private var isLocalSendFailedOrRejected: Bool {
         if case .failed = localSendService.transferState { return true }
         if case .rejected = localSendService.transferState { return true }
@@ -524,7 +538,9 @@ struct ContentView: View {
             // Extra horizontal inset for Dynamic Island mode so the shadow
             // is not clipped by the outer frame constraint
             .padding(.horizontal, isIslandMode ? dynamicIslandShadowInset : 0)
+            .padding(.bottom, isIslandMode ? dynamicIslandShadowInset : 0)
             .padding(.top, pillTopOffset)
+            .accessibilityIdentifier("AtollNotch")
     }
 
     private var configuredMainLayout: some View {
@@ -705,8 +721,8 @@ struct ContentView: View {
             configuredMainLayout
         }
         .frame(
-            maxWidth: dynamicNotchSize.width + (isDynamicIslandMode ? dynamicIslandShadowInset * 2 : 0),
-            maxHeight: dynamicNotchSize.height + currentShadowPadding + (isDynamicIslandMode ? dynamicIslandTopOffset : 0),
+            maxWidth: (dynamicNotchSize.width + (vm.notchState == .open ? 24 : 0) + (isDynamicIslandMode ? dynamicIslandShadowInset * 2 : 0)).rounded(),
+            maxHeight: (dynamicNotchSize.height + (vm.notchState == .open ? 12 : 0) + (isDynamicIslandMode ? dynamicIslandTopOffset + dynamicIslandShadowInset * 2 : currentShadowPadding)).rounded(),
             alignment: .top
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -892,6 +908,9 @@ struct ContentView: View {
                       let canShowMusicDuringExpansion = !isCurrentScreenExpansionVisible
                           || currentScreenExpansionType == .music
                           || expansionMatchesSecondary
+                      let isAirPodsListeningModeSneak = coordinator.sneakPeek.type == .bluetoothAudio
+                          && coordinator.sneakPeek.value < 0
+                          && AirPodsListeningMode.fromHUDSymbol(coordinator.sneakPeek.icon) != nil
 
                       if currentScreenExpansionType == .battery
                             && isBatteryHUDVisibleOnCurrentScreen
@@ -909,7 +928,7 @@ struct ContentView: View {
                             styleOverride: batteryModel.activeTemporaryHUDKind.map { resolvedBatteryNotificationStyle(for: $0) }
                         )
                         .id(batteryModel.activeTemporaryHUDToken)
-                      } else if isSneakPeekVisibleOnCurrentScreen && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .timer) && (coordinator.sneakPeek.type != .reminder) && !coordinator.sneakPeek.type.isExtensionPayload && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
+                      } else if isSneakPeekVisibleOnCurrentScreen && (Defaults[.inlineHUD] || isAirPodsListeningModeSneak) && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .timer) && (coordinator.sneakPeek.type != .reminder) && !coordinator.sneakPeek.type.isExtensionPayload && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(
                                   coordinator.sneakPeek.type == .capsLock
@@ -957,17 +976,18 @@ struct ContentView: View {
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && !shelfState.isEmpty && !vm.hideOnClosed && !lockScreenManager.isLocked && !enableMinimalisticUI {
                           ShelfInlineLiveActivity()
                               .transition(.opacity.animation(.smooth(duration: 0.25)))
-                      } else if !coordinator.expandingView.show && !isCurrentScreenExpansionVisible && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
+                      } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
+                      } else if !isCurrentScreenExpansionVisible && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           DynamicIslandFaceAnimation().animation(.interactiveSpring, value: musicManager.isPlayerIdle)
                       } else if vm.notchState == .open {
                           DynamicIslandHeader()
-                              .frame(height: max(24, vm.effectiveClosedNotchHeight))
+                              .frame(height: (Defaults[.enableMinimalisticUI] && isDynamicIslandMode) ? nil : max(24, vm.effectiveClosedNotchHeight))
                        } else {
                            Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
                        }
-
+                      
                       if isSneakPeekVisibleOnCurrentScreen {
-                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .timer) && (coordinator.sneakPeek.type != .reminder) && (coordinator.sneakPeek.type != .capsLock) && !coordinator.sneakPeek.type.isExtensionPayload && !Defaults[.inlineHUD] && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
+                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .timer) && (coordinator.sneakPeek.type != .reminder) && (coordinator.sneakPeek.type != .capsLock) && !coordinator.sneakPeek.type.isExtensionPayload && !Defaults[.inlineHUD] && !isAirPodsListeningModeSneak && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
                               SystemEventIndicatorModifier(eventType: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, sendEventBack: { _ in
                                   //
                               })
@@ -1070,6 +1090,8 @@ struct ContentView: View {
                                   NotchTimerView()
                               case .stats:
                                   NotchStatsView()
+                              case .llmUsage:
+                                  NotchLLMUsageView()
                               case .colorPicker:
                                   NotchColorPickerView()
                             case .notes:
@@ -1516,20 +1538,31 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private func SpectrumVisualizer(
+        useMusicVisualizer: Bool,
+        forceSpectrum: Bool
+    ) -> some View {
+        let width = CGFloat(Defaults[.visualizerBarCount]) * 4
+        if useMusicVisualizer || forceSpectrum {
+            Rectangle()
+                .fill((Defaults[.coloredSpectrogram] ? Color(nsColor: musicManager.avgColor) : Color.gray).spectrogramGradient())
+                .frame(width: 50, alignment: .center)
+                .matchedGeometryEffect(id: "spectrum", in: albumArtNamespace)
+                .mask {
+                    AudioVisualizerView(isPlaying: $musicManager.isPlaying)
+                        .frame(width: width, height: 12)
+                }
+        }
+    }
+
+    @ViewBuilder
     private func spectrumView(
         forceSpectrum: Bool,
         trailingInset: CGFloat = 0,
         enableClosedPlayPauseOverlay: Bool = false
     ) -> some View {
         if useMusicVisualizer || forceSpectrum {
-            Rectangle()
-                .fill(Defaults[.coloredSpectrogram] ? Color(nsColor: musicManager.avgColor).gradient : Color.gray.gradient)
-                .frame(width: 50, alignment: .center)
-                .matchedGeometryEffect(id: "spectrum", in: albumArtNamespace)
-                .mask {
-                    AudioVisualizerView(isPlaying: $musicManager.isPlaying)
-                        .frame(width: 16, height: 12)
-                }
+            SpectrumVisualizer(useMusicVisualizer: useMusicVisualizer, forceSpectrum: forceSpectrum)
                 .blur(radius: (enableClosedPlayPauseOverlay && isHoveringClosedMusicWaveformControl) ? 2.4 : 0)
                 .overlay {
                     if enableClosedPlayPauseOverlay {
@@ -1814,7 +1847,7 @@ struct ContentView: View {
             Logger.log(message, category: .extensions)
         }
     }
-
+    
     @ViewBuilder
     var dragDetector: some View {
         if lockScreenManager.isLocked {
@@ -2113,12 +2146,12 @@ struct ContentView: View {
 
         return NSApp.windows.contains(where: { $0.frame.contains(point) })
     }
-
+    
     // Helper function to check if any popovers are active
     private func hasAnyActivePopovers() -> Bool {
-     return vm.isBatteryPopoverActive ||
-         vm.isClipboardPopoverActive ||
-         vm.isColorPickerPopoverActive ||
+     return vm.isBatteryPopoverActive || 
+         vm.isClipboardPopoverActive || 
+         vm.isColorPickerPopoverActive || 
          vm.isStatsPopoverActive ||
          vm.isTimerPopoverActive ||
          vm.isMediaOutputPopoverActive ||
@@ -2128,7 +2161,7 @@ struct ContentView: View {
     private func shouldPreventAutoClose() -> Bool {
         coordinator.firstLaunch || hasAnyActivePopovers() || vm.isAutoCloseSuppressed || SharingStateManager.shared.preventNotchClose || (Defaults[.terminalStickyMode] && coordinator.currentView == .terminal)
     }
-
+    
     // Helper to prevent rapid haptic feedback
     private func triggerHapticIfAllowed() {
         let now = Date()
@@ -2137,7 +2170,7 @@ struct ContentView: View {
             lastHapticTime = now
         }
     }
-
+    
     // Helper to check if stats tab has 4+ graphs (needs expanded height)
     private func enabledStatsGraphCount() -> Int {
         var enabledCount = 0
@@ -2220,13 +2253,13 @@ struct ContentView: View {
         let clampedHeight = min(max(estimatedHeight, minHeight), maxHeight)
         return clampedHeight > minHeight ? clampedHeight : nil
     }
-
+    
     // MARK: - Gesture Handling
 
     private func handleDownGesture(translation: CGFloat, phase: NSEvent.Phase) {
         handleScrollGesture(isDownward: true, translation: translation, phase: phase)
     }
-
+    
     private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
         handleScrollGesture(isDownward: false, translation: translation, phase: phase)
     }
@@ -2599,22 +2632,22 @@ struct ContentView: View {
 
     private func hideMusicControlWindow() {}
     #endif
-
+    
     private func shouldFixSizeForSneakPeek() -> Bool {
         guard isSneakPeekVisibleOnCurrentScreen else { return false }
         let style = resolvedSneakPeekStyle()
-
+        
         // Check for extension sneak peek
         if case .extensionLiveActivity = coordinator.sneakPeek.type {
             return vm.notchState == .closed && style == .standard
         }
-
+        
         // Original logic for other types
         let isMusicSneak = coordinator.sneakPeek.type == .music && vm.notchState == .closed && !vm.hideOnClosed && style == .standard
         let isTimerSneak = coordinator.sneakPeek.type == .timer && !vm.hideOnClosed && style == .standard
         let isReminderSneak = coordinator.sneakPeek.type == .reminder && !vm.hideOnClosed && style == .standard
         let isOtherSneak = coordinator.sneakPeek.type != .music && coordinator.sneakPeek.type != .timer && coordinator.sneakPeek.type != .reminder && vm.notchState == .closed
-
+        
         return isMusicSneak || isTimerSneak || isReminderSneak || isOtherSneak
     }
 
@@ -2717,6 +2750,8 @@ private struct MusicTimerSupplementView: View {
             Text(countdownText)
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundColor(timerManager.isOvertime ? .red : .white)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .contentTransition(.numericText())
                 .animation(.smooth(duration: 0.25), value: timerManager.remainingTime)
                 .frame(width: countdownFrameWidth, alignment: .trailing)
@@ -2725,7 +2760,7 @@ private struct MusicTimerSupplementView: View {
                 barView(width: countdownTextWidth)
             }
         }
-        .padding(.trailing, 8)
+        .padding(.trailing, 2)
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
@@ -2872,7 +2907,9 @@ private typealias MusicSupplementFont = UIFont
 
 private enum TimerSupplementMetrics {
     static func countdownTextWidth(for text: String) -> CGFloat {
-        musicMeasureText(text, font: MusicSupplementFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold))
+        // Measure with a fully monospaced font (matching the `.monospaced` design used
+        // to render) so hour-format times like 1:00:00 aren't under-measured and clipped.
+        musicMeasureText(text, font: MusicSupplementFont.monospacedSystemFont(ofSize: 13, weight: .semibold))
     }
 
     static func countdownFrameWidth(for text: String) -> CGFloat {
