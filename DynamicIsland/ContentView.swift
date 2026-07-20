@@ -1077,7 +1077,7 @@ struct ContentView: View {
                       .fixedSize()
               }
               .zIndex(2)
-
+              
               ZStack {
                   if vm.notchState == .open {
                       Group {
@@ -1856,7 +1856,7 @@ struct ContentView: View {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
-                .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { _ in true }
+                .onDrop(of: [.data], isTargeted: $vm.dragDetectorTargeting) { _ in true }
                 .onChange(of: vm.anyDropZoneTargeting) { _, isTargeted in
                     if isTargeted, vm.notchState == .closed {
                         coordinator.currentView = .shelf
@@ -2060,7 +2060,7 @@ struct ContentView: View {
     }
 
     // MARK: - Hover Management
-
+    
     /// Handle hover state changes with debouncing
     private func handleHover(_ hovering: Bool) {
         hoverTask?.cancel()
@@ -2255,7 +2255,7 @@ struct ContentView: View {
     }
     
     // MARK: - Gesture Handling
-
+    
     private func handleDownGesture(translation: CGFloat, phase: NSEvent.Phase) {
         handleScrollGesture(isDownward: true, translation: translation, phase: phase)
     }

@@ -129,7 +129,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
         animation = animationLibrary.animation
 
         super.init()
-
+        
         self.screen = screen
         notchSize = getClosedNotchSize(screen: screen)
         closedNotchSize = notchSize
@@ -140,7 +140,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             }
             .assign(to: \.anyDropZoneTargeting, on: self)
             .store(in: &cancellables)
-
+        
         setupDetectorObserver()
 
         ReminderLiveActivityManager.shared.$activeWindowReminders
@@ -280,24 +280,7 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             )
         }
     }
-
-    private func handleMinimalisticTimerHeightChange() {
-        guard Defaults[.enableMinimalisticUI] else { return }
-        guard notchState == .open else { return }
-        let updatedTarget = calculateDynamicNotchSize()
-        guard notchSize != updatedTarget else { return }
-        withAnimation(.smooth) {
-            notchSize = updatedTarget
-        }
-        if let delegate = AppDelegate.shared {
-            delegate.ensureWindowSize(
-                addShadowPadding(to: updatedTarget, isMinimalistic: Defaults[.enableMinimalisticUI]),
-                animated: true,
-                force: false
-            )
-        }
-    }
-
+    
     private func setupDetectorObserver() {
         // 1) Publisher for the user’s fullscreen detection setting
         let enabledPublisher = Defaults
@@ -327,29 +310,24 @@ class DynamicIslandViewModel: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
     }
-
+    
     // Computed property for effective notch height
     var effectiveClosedNotchHeight: CGFloat {
-        // If the stored screen name no longer matches (e.g. after a display
-        // reconnect the identifier changed), fall back to the main screen so
-        // the notch does not collapse to zero height and become unresponsive.
         let currentScreen = NSScreen.screens.first { $0.localizedName == screen }
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
-        let noNotchAndFullscreen = hideOnClosed && (currentScreen?.safeAreaInsets.top ?? 0 <= 0)
+        let noNotchAndFullscreen = hideOnClosed && (currentScreen?.safeAreaInsets.top ?? 0 <= 0 || currentScreen == nil)
         return noNotchAndFullscreen ? 0 : closedNotchSize.height
     }
 
     func isMouseHovering(position: NSPoint = NSEvent.mouseLocation) -> Bool {
         let screenFrame = getScreenFrame(screen)
         if let frame = screenFrame {
-
+            
             let baseY = frame.maxY - notchSize.height
             let baseX = frame.midX - notchSize.width / 2
-
+            
             return position.y >= baseY && position.x >= baseX && position.x <= baseX + notchSize.width
         }
-
+        
         return false
     }
 

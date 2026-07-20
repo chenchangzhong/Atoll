@@ -145,41 +145,6 @@ struct TabSelectionView: View {
                 
             }
         }
-        return tabsArray
-    }
-    var body: some View {
-        HStack(spacing: 24) {
-            ForEach(Array(tabs.enumerated()), id: \.element.id) { idx, tab in
-                let isSelected = isSelected(tab)
-                let activeAccent = tab.accentColor ?? .white
-
-                // Render the tab button
-                TabButton(label: tab.label, icon: tab.icon, selected: isSelected) {
-                    if tab.view == .extensionExperience {
-                        coordinator.selectedExtensionExperienceID = tab.experienceID
-                    }
-                    coordinator.currentView = tab.view
-                }
-                .frame(height: 26)
-                .foregroundStyle(isSelected ? activeAccent : .gray)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill((tab.accentColor ?? Color(nsColor: .secondarySystemFill)).opacity(0.25))
-                            .shadow(color: (tab.accentColor ?? .clear).opacity(0.4), radius: 8)
-                            .matchedGeometryEffect(id: "capsule", in: animation)
-                    } else {
-                        Capsule()
-                            .fill(Color.clear)
-                            .matchedGeometryEffect(id: "capsule", in: animation)
-                            .hidden()
-                    }
-                }
-
-                
-            }
-        }
-        .animation(.smooth(duration: 0.3), value: coordinator.currentView)
         .clipShape(Capsule())
         .onAppear {
             ensureValidSelection(with: tabs)

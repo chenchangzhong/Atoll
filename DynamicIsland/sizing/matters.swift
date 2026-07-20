@@ -99,7 +99,7 @@ func enabledStandardTabCount() -> Int {
 func recommendedMinimumNotchWidth(forTabCount count: Int) -> CGFloat {
     if count >= 6 { return 770 }
     if count >= 5 { return 690 }
-    return 640
+    return 420
 }
 
 /// Returns the recommended minimum notch width for the current tab configuration.

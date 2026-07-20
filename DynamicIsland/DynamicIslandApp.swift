@@ -268,107 +268,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Restore Lunar's native OSD if integration was active
         LunarManager.shared.appWillTerminate()
     }
-
-    func application(_ application: NSApplication, open urls: [URL]) {
-        _ = handleIncomingShelfURLs(urls)
-    }
-
-    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        handleIncomingShelfURLs([URL(fileURLWithPath: filename)])
-    }
-
-    private func handleIncomingShelfURLs(_ urls: [URL]) -> Bool {
-        let fileURLs = urls.filter(\.isFileURL)
-        guard !fileURLs.isEmpty else { return false }
-
-        Task { @MainActor [weak self] in
-            let items = await ShelfDropService.items(from: fileURLs)
-            guard !items.isEmpty else { return }
-
-            ShelfStateViewModel.shared.add(items)
-            self?.coordinator.currentView = .shelf
-        }
-
-        return true
-    }
-
-    /// Setup observers for music player state changes to restart AudioTap capture
-    private func setupAudioTapMusicObservers() {
-        // Listen for app launches to restart capture when music apps are opened
-        let targetBundleIDs = [
-            "com.apple.Music",
-            "com.spotify.client",
-            "com.amazon.music",
-            "com.apple.Safari",
-            "com.tidal.desktop",
-            "tv.plex.plexamp",
-            "com.roon.Roon",
-            "com.audirvana.Audirvana-Studio",
-            "com.vox.vox",
-            "com.coppertino.Vox",
-        ]
-
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didLaunchApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let bundleID = app.bundleIdentifier,
-                  targetBundleIDs.contains(bundleID) else { return }
-
-            // A target music app was launched, restart capture to include it
-            if Defaults[.enableRealTimeWaveform] {
-                print("🎵 [AudioTap] Music app launched: \(bundleID), restarting capture...")
-                // Give the app a moment to fully launch
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    AudioTap.shared.restartCapture()
-                }
-            }
-        }
-
-        // Also observe app terminations to restart capture
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didTerminateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let bundleID = app.bundleIdentifier,
-                  targetBundleIDs.contains(bundleID) else { return }
-
-            // A target music app was terminated, restart capture to update the list
-            if Defaults[.enableRealTimeWaveform] {
-                print("🎵 [AudioTap] Music app terminated: \(bundleID), restarting capture...")
-                AudioTap.shared.restartCapture()
-            }
-        }
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        let userInfo: [String: Any] = [
-            AtollDistributedNotifications.UserInfoKey.sourcePID: NSNumber(value: ProcessInfo.processInfo.processIdentifier)
-        ]
-        DistributedNotificationCenter.default().postNotificationName(
-            AtollDistributedNotifications.didBecomeIdle,
-            object: nil,
-            userInfo: userInfo,
-            deliverImmediately: true
-        )
-
-        // Cancel any pending window size updates
-        windowSizeUpdateWorkItem?.cancel()
-        NotificationCenter.default.removeObserver(self)
-        extensionXPCServiceHost.stop()
-        extensionRPCServer.stop()
-
-        // Stop AudioTap capture
-        AudioTap.shared.stopCapture()
-
-        // Restore Lunar's native OSD if integration was active
-        LunarManager.shared.appWillTerminate()
-    }
-
+    
     @objc func onScreenLocked(_: Notification) {
         print("Screen locked")
         hideWindowsForLock()
@@ -480,8 +380,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 .environmentObject(webcamManager)
                 //.moveToSky()
         )
-
-        reapplyWindowPresentationAttributes(window)
+        
         window.orderFrontRegardless()
         // Pin above every space (fullscreen included) only for "Never hide"; the
         // hide options leave the window on the collectionBehavior path so
@@ -516,8 +415,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         if changeAlpha {
             window.alphaValue = 1
-            window.display()
-            window.invalidateShadow()
         }
     }
     
@@ -943,24 +840,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.showOnAllDisplaysChanged, object: nil, queue: nil
         ) { [weak self] _ in
             guard let self = self else { return }
-            // Clean up windows from BOTH modes since the setting has already changed.
-            // The old cleanupWindows() only cleaned the current mode's windows.
-            for (screen, window) in self.windows {
-                self.viewModels[screen]?.destroy()
-                window.contentView = nil
-                window.close()
-                NotchSpaceManager.shared.notchSpace.windows.remove(window)
-            }
-            self.windows.removeAll()
-            self.viewModels.removeAll()
-            if let window = self.window {
-                self.vm.onViewTeardown?()
-                self.vm.onViewTeardown = nil
-                window.contentView = nil
-                window.close()
-                NotchSpaceManager.shared.notchSpace.windows.remove(window)
-                self.window = nil
-            }
+            self.cleanupWindows(shouldInvert: true)
 
             if !Defaults[.showOnAllDisplays] {
                 let viewModel = self.vm
@@ -1049,7 +929,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             playWelcomeSound()
         }
-
+        
         previousScreens = NSScreen.screens
 
         // Skip weather under UI testing: prepareLocationAccess prompts for Location.
@@ -1447,275 +1327,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             KeyboardShortcuts.disable(name)
         }
     }
-
-    private func installTopMenuItemsIfNeeded() {
-        guard let mainMenu = NSApp.mainMenu else { return }
-        if mainMenu.items.contains(where: { $0.identifier?.rawValue == "Atoll.Focus.Menu" }) {
-            updateFocusMenuState()
-            return
-        }
-
-        let insertionIndex = preferredMenuInsertionIndex(in: mainMenu)
-
-        let focusMenuItem = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
-        focusMenuItem.identifier = NSUserInterfaceItemIdentifier("Atoll.Focus.Menu")
-        let focusSubmenu = NSMenu(title: "Focus")
-
-        let withoutDevTools = NSMenuItem(
-            title: "Use without DevTools",
-            action: #selector(selectFocusWithoutDevTools),
-            keyEquivalent: ""
-        )
-        withoutDevTools.target = self
-
-        let useDevTools = NSMenuItem(
-            title: "Use DevTools",
-            action: #selector(selectFocusUseDevTools),
-            keyEquivalent: ""
-        )
-        useDevTools.target = self
-
-        focusSubmenu.addItem(withoutDevTools)
-        focusSubmenu.addItem(useDevTools)
-        focusMenuItem.submenu = focusSubmenu
-        mainMenu.insertItem(focusMenuItem, at: insertionIndex)
-
-        focusWithoutDevToolsMenuItem = withoutDevTools
-        focusUseDevToolsMenuItem = useDevTools
-
-        let accessibilityMenuItem = NSMenuItem(title: "Accessibility", action: nil, keyEquivalent: "")
-        accessibilityMenuItem.identifier = NSUserInterfaceItemIdentifier("Atoll.Accessibility.Menu")
-        let accessibilitySubmenu = NSMenu(title: "Accessibility")
-
-        let requestAccessibility = NSMenuItem(
-            title: "Request Accessibility Access",
-            action: #selector(requestAccessibilityAccess),
-            keyEquivalent: ""
-        )
-        requestAccessibility.target = self
-
-        let openAccessibility = NSMenuItem(
-            title: "Open Accessibility Settings",
-            action: #selector(openAccessibilitySettings),
-            keyEquivalent: ""
-        )
-        openAccessibility.target = self
-
-        accessibilitySubmenu.addItem(requestAccessibility)
-        accessibilitySubmenu.addItem(openAccessibility)
-        accessibilityMenuItem.submenu = accessibilitySubmenu
-        mainMenu.insertItem(accessibilityMenuItem, at: insertionIndex + 1)
-
-        let permissionsMenuItem = NSMenuItem(title: "Permissions", action: nil, keyEquivalent: "")
-        permissionsMenuItem.identifier = NSUserInterfaceItemIdentifier("Atoll.Permissions.Menu")
-        let permissionsSubmenu = NSMenu(title: "Permissions")
-
-        let requestFullDisk = NSMenuItem(
-            title: "Request Full Disk Access",
-            action: #selector(requestFullDiskAccess),
-            keyEquivalent: ""
-        )
-        requestFullDisk.target = self
-
-        let openFullDisk = NSMenuItem(
-            title: "Open Full Disk Access Settings",
-            action: #selector(openFullDiskAccessSettings),
-            keyEquivalent: ""
-        )
-        openFullDisk.target = self
-
-        let openDevTools = NSMenuItem(
-            title: "Open Developer Tools Settings",
-            action: #selector(openDeveloperToolsSettingsFromMenu),
-            keyEquivalent: ""
-        )
-        openDevTools.target = self
-
-        permissionsSubmenu.addItem(requestFullDisk)
-        permissionsSubmenu.addItem(openFullDisk)
-        permissionsSubmenu.addItem(NSMenuItem.separator())
-        permissionsSubmenu.addItem(openDevTools)
-        permissionsMenuItem.submenu = permissionsSubmenu
-        mainMenu.insertItem(permissionsMenuItem, at: insertionIndex + 2)
-
-        updateFocusMenuState()
-    }
-
-    private func preferredMenuInsertionIndex(in mainMenu: NSMenu) -> Int {
-        if let index = mainMenu.items.firstIndex(where: { $0.title == "Window" }) {
-            return index
-        }
-        if let index = mainMenu.items.firstIndex(where: { $0.title == "Help" }) {
-            return index
-        }
-        return max(mainMenu.numberOfItems, 0)
-    }
-
-    private func updateFocusMenuState() {
-        let mode = Defaults[.focusMonitoringMode]
-        focusWithoutDevToolsMenuItem?.state = mode == .withoutDevTools ? .on : .off
-        focusUseDevToolsMenuItem?.state = mode == .useDevTools ? .on : .off
-    }
-
-    @objc private func selectFocusWithoutDevTools() {
-        Defaults[.focusMonitoringMode] = .withoutDevTools
-        updateFocusMenuState()
-    }
-
-    @objc private func selectFocusUseDevTools() {
-        Defaults[.focusMonitoringMode] = .useDevTools
-        updateFocusMenuState()
-    }
-
-    @objc private func requestAccessibilityAccess() {
-        AccessibilityPermissionStore.shared.requestAuthorizationPrompt()
-    }
-
-    @objc private func openAccessibilitySettings() {
-        AccessibilityPermissionStore.shared.openSystemSettings()
-    }
-
-    @objc private func requestFullDiskAccess() {
-        FullDiskAccessPermissionStore.shared.requestAccessPrompt()
-    }
-
-    @objc private func openFullDiskAccessSettings() {
-        FullDiskAccessPermissionStore.shared.openSystemSettings()
-    }
-
-    @objc private func openDeveloperToolsSettingsFromMenu() {
-        let urls = [
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_DevTools",
-            "x-apple.systempreferences:com.apple.preference.security"
-        ]
-
-        for candidate in urls {
-            guard let url = URL(string: candidate) else { continue }
-            if NSWorkspace.shared.open(url) {
-                return
-            }
-        }
-    }
-
-    private func registerOptionalShortcutHandlers() {
-        guard !optionalShortcutHandlersRegistered else { return }
-        optionalShortcutHandlersRegistered = true
-
-        KeyboardShortcuts.onKeyDown(for: .startDemoTimer) {
-            guard Defaults[.enableShortcuts], Defaults[.enableTimerFeature] else { return }
-            TimerManager.shared.startDemoTimer(duration: 300)
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .clipboardHistoryPanel) { [weak self] in
-            guard let self else { return }
-            guard Defaults[.enableShortcuts], Defaults[.enableClipboardManager] else { return }
-
-            if !ClipboardManager.shared.isMonitoring {
-                ClipboardManager.shared.startMonitoring()
-            }
-
-            switch Defaults[.clipboardDisplayMode] {
-            case .panel:
-                ClipboardPanelManager.shared.toggleClipboardPanel()
-            case .popover:
-                if vm.notchState == .closed {
-                    vm.open()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        NotificationCenter.default.post(name: NSNotification.Name("ToggleClipboardPopover"), object: nil)
-                    }
-                } else {
-                    NotificationCenter.default.post(name: NSNotification.Name("ToggleClipboardPopover"), object: nil)
-                }
-            case .separateTab:
-                if vm.notchState == .closed {
-                    vm.open()
-                    coordinator.currentView = .notes
-                } else {
-                    if coordinator.currentView == .notes {
-                        vm.close()
-                    } else {
-                        coordinator.currentView = .notes
-                    }
-                }
-            }
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .colorPickerPanel) {
-            guard Defaults[.enableShortcuts], Defaults[.enableColorPickerFeature] else { return }
-            ColorPickerPanelManager.shared.toggleColorPickerPanel()
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .toggleTerminalTab) { [weak self] in
-            guard let self else { return }
-            guard Defaults[.enableShortcuts], Defaults[.enableTerminalFeature] else { return }
-
-            if vm.notchState == .closed {
-                closeNotchWorkItem?.cancel()
-                closeNotchWorkItem = nil
-                vm.open()
-                coordinator.currentView = .terminal
-                TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-                TerminalManager.shared.focusTerminalIfPossible()
-                TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-            } else {
-                if coordinator.currentView == .terminal {
-                    coordinator.suppressHoverOpen()
-                    TerminalManager.shared.resignTerminalFirstResponderIfNeeded()
-                    vm.close()
-                } else {
-                    closeNotchWorkItem?.cancel()
-                    closeNotchWorkItem = nil
-                    coordinator.currentView = .terminal
-                    TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-                    TerminalManager.shared.focusTerminalIfPossible()
-                    TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-                }
-            }
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .screenAssistantPanel) { [weak self] in
-            guard let self else { return }
-            guard Defaults[.enableShortcuts], Defaults[.enableScreenAssistant] else { return }
-
-            switch Defaults[.screenAssistantDisplayMode] {
-            case .panel:
-                ScreenAssistantPanelManager.shared.toggleScreenAssistantPanel()
-            case .popover:
-                if vm.notchState == .closed {
-                    vm.open()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        NotificationCenter.default.post(name: NSNotification.Name("ToggleScreenAssistantPopover"), object: nil)
-                    }
-                } else {
-                    NotificationCenter.default.post(name: NSNotification.Name("ToggleScreenAssistantPopover"), object: nil)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func updateFeatureShortcutAvailability() {
-        updateShortcut(.startDemoTimer, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableTimerFeature])
-        updateShortcut(.clipboardHistoryPanel, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableClipboardManager])
-        updateShortcut(.colorPickerPanel, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableColorPickerFeature])
-        updateShortcut(.screenAssistantPanel, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableScreenAssistant])
-        updateShortcut(.toggleTerminalTab, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableTerminalFeature])
-    }
-
-    @MainActor
-    private func updateShortcut(_ name: KeyboardShortcuts.Name, isEnabled: Bool) {
-        if isEnabled {
-            KeyboardShortcuts.enable(name)
-        } else {
-            KeyboardShortcuts.disable(name)
-        }
-    }
-
+    
     func playWelcomeSound() {
         let audioPlayer = AudioPlayer()
         audioPlayer.play(fileName: "dynamic", fileExtension: "m4a")
     }
-
+    
     func deviceHasNotch() -> Bool {
         if #available(macOS 12.0, *) {
             for screen in NSScreen.screens {
@@ -1726,44 +1343,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return false
     }
-
+    
     @objc func screenConfigurationDidChange() {
         let currentScreens = NSScreen.screens
 
-        // Use the stable CGDirectDisplayID (NSScreenNumber) to detect real
-        // display attach/detach. localizedName/frame can miss changes when the
-        // same monitor is reconnected to the same position after sleeping.
-        let screenNumberKey = NSDeviceDescriptionKey("NSScreenNumber")
-        let previousScreensSnapshot = previousScreens ?? []
-        let currentIDs = Set(currentScreens.compactMap {
-            ($0.deviceDescription[screenNumberKey] as? NSNumber)?.uint32Value
-        })
-        let previousIDs = Set(previousScreensSnapshot.compactMap {
-            ($0.deviceDescription[screenNumberKey] as? NSNumber)?.uint32Value
-        })
-        // Also detect resolution / arrangement changes so the notch is
-        // repositioned when the user changes scaling or display layout.
-        let framesChanged = Set(currentScreens.map(\.frame))
-            != Set(previousScreensSnapshot.map(\.frame))
-        let screensChanged = (currentIDs != previousIDs) || framesChanged
+        let screensChanged =
+            currentScreens.count != previousScreens?.count
+            || Set(currentScreens.map { $0.localizedName })
+                != Set(previousScreens?.map { $0.localizedName } ?? [])
+            || Set(currentScreens.map { $0.frame }) != Set(previousScreens?.map { $0.frame } ?? [])
 
         previousScreens = currentScreens
-
+        
         if screensChanged {
             DispatchQueue.main.async { [weak self] in
                 self?.cleanupWindows()
-                self?.adjustWindowPosition(changeAlpha: true)
+                self?.adjustWindowPosition()
             }
         }
     }
-
+    
     @objc func adjustWindowPosition(changeAlpha: Bool = false) {
         if Defaults[.showOnAllDisplays] {
             let currentScreens = Set(NSScreen.screens)
-
-            // Drop any window whose screen is no longer present. Use the same
-            // full teardown as cleanupWindows() so the old view model and its
-            // rendering context are released.
+            
             for screen in windows.keys where !currentScreens.contains(screen) {
                 if let window = windows[screen] {
                     viewModels[screen]?.onViewTeardown?()
@@ -1773,33 +1376,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     viewModels.removeValue(forKey: screen)
                 }
             }
-
-            // If a single-window-mode window somehow survived, clean it up too.
-            if let leftoverWindow = window {
-                vm.onViewTeardown?()
-                vm.onViewTeardown = nil
-                leftoverWindow.contentView = nil
-                leftoverWindow.close()
-                NotchSpaceManager.shared.notchSpace.windows.remove(leftoverWindow)
-                self.window = nil
-            }
-
+            
             for screen in currentScreens {
                 if windows[screen] == nil {
                     let viewModel = DynamicIslandViewModel(screen: screen.localizedName)
                     let window = createDynamicIslandWindow(for: screen, with: viewModel)
-
+                    
                     windows[screen] = window
                     viewModels[screen] = viewModel
                 }
-
+                
                 if let window = windows[screen], let viewModel = viewModels[screen] {
-                    reapplyWindowPresentationAttributes(window)
                     positionWindow(window, on: screen, changeAlpha: changeAlpha)
-                    window.orderFrontRegardless()
-                    window.display()
-                    window.invalidateShadow()
-
+                    
                     if viewModel.notchState == .closed {
                         viewModel.close()
                     }
@@ -1822,40 +1411,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
-
+            
             vm.screen = selectedScreen.localizedName
             vm.notchSize = getClosedNotchSize(screen: selectedScreen.localizedName)
-
+            
             if window == nil {
                 window = createDynamicIslandWindow(for: selectedScreen, with: vm)
             }
-
+            
             if let window = window {
-                reapplyWindowPresentationAttributes(window)
                 positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
-                window.orderFrontRegardless()
-                window.display()
-                window.invalidateShadow()
-
+                
                 if vm.notchState == .closed {
                     vm.close()
                 }
             }
         }
     }
-
-    private func reapplyWindowPresentationAttributes(_ window: NSWindow) {
-        // Re-assert the window level and collection behavior after a display
-        // change; macOS can reset these when the window is moved/recreated.
-        window.level = .mainMenu + 3
-        window.collectionBehavior = [
-            .fullScreenAuxiliary,
-            .stationary,
-            .canJoinAllSpaces,
-            .ignoresCycle,
-        ]
-    }
-
+    
     @objc func togglePopover(_ sender: Any?) {
         if window?.isVisible == true {
             window?.orderOut(nil)
@@ -1863,11 +1436,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window?.orderFrontRegardless()
         }
     }
-
+    
     @objc func showMenu() {
         statusItem?.menu?.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
-
+    
     @objc func quitAction() {
         NSApplication.shared.terminate(nil)
     }
