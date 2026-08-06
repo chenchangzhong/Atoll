@@ -1358,7 +1358,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if screensChanged {
             DispatchQueue.main.async { [weak self] in
                 self?.cleanupWindows()
-                self?.adjustWindowPosition()
+                self?.adjustWindowPosition(changeAlpha: true)
             }
         }
     }
@@ -1388,6 +1388,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 
                 if let window = windows[screen], let viewModel = viewModels[screen] {
                     positionWindow(window, on: screen, changeAlpha: changeAlpha)
+                    window.orderFrontRegardless()
+                    window.display()
+                    window.invalidateShadow()
                     
                     if viewModel.notchState == .closed {
                         viewModel.close()
@@ -1421,6 +1424,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             
             if let window = window {
                 positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
+                window.orderFrontRegardless()
+                window.display()
+                window.invalidateShadow()
                 
                 if vm.notchState == .closed {
                     vm.close()
