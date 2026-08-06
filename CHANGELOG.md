@@ -8,6 +8,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2.3.3] - 2026-07-24
+
+### Added
+
+### Changed
+
+### Fixed
+- Fixed an issue where `BluetoothHUDAnimations` (.mov files) were missing in release builds.
+- Improved the GitHub Actions release workflow to use a monotonic build number allocator and automated patch versioning for stable releases.
+
+### Removed
+
+## [2.3.2] - 2026-07-20
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2.3.1] - 2026-07-20
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2.3.0] - 2026-07-20
+
+### Added
 - **Lock Screen & Live Activities**: Full support for Lock Screen widgets, Live Activities, and expanding lock screen music players with flip animations.
 - **Screen Assistant (AI)**: Introducing Screen Assistant with snipping capabilities and Gemini API integration.
 - **Advanced System HUDs**: Dynamic polling HUDs for Volume (mute/unmute), Brightness, Bluetooth, and Privacy Access Indicators.
