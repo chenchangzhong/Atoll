@@ -27,7 +27,6 @@ import Foundation
 import KeyboardShortcuts
 import SwiftUI
 import SwiftUIIntrospect
-import AtollExtensionKit
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
@@ -41,49 +40,25 @@ struct ContentView: View {
 
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
-    @ObservedObject var timerManager = TimerManager.shared
-    @ObservedObject var reminderManager = ReminderLiveActivityManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
-    @ObservedObject var statsManager = StatsManager.shared
     @ObservedObject var recordingManager = ScreenRecordingManager.shared
     @ObservedObject var privacyManager = PrivacyIndicatorManager.shared
     @ObservedObject var doNotDisturbManager = DoNotDisturbManager.shared
     @ObservedObject var lockScreenManager = LockScreenManager.shared
     @ObservedObject var capsLockManager = CapsLockManager.shared
-    @ObservedObject var extensionLiveActivityManager = ExtensionLiveActivityManager.shared
-    @ObservedObject var extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
     @ObservedObject var localSendService = LocalSendService.shared
     @State private var downloadManager = DownloadManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
     
-    @Default(.enableStatsFeature) var enableStatsFeature
-    @Default(.showCpuGraph) var showCpuGraph
-    @Default(.showMemoryGraph) var showMemoryGraph
-    @Default(.showGpuGraph) var showGpuGraph
-    @Default(.showNetworkGraph) var showNetworkGraph
-    @Default(.showDiskGraph) var showDiskGraph
-    @Default(.enableReminderLiveActivity) var enableReminderLiveActivity
-    @Default(.enableTimerFeature) var enableTimerFeature
-    @Default(.timerDisplayMode) var timerDisplayMode
-    @Default(.enableHorizontalMusicGestures) var enableHorizontalMusicGestures
-    @Default(.reminderPresentationStyle) var reminderPresentationStyle
-    @Default(.timerShowsCountdown) var timerShowsCountdown
-    @Default(.timerShowsProgress) var timerShowsProgress
-    @Default(.timerProgressStyle) var timerProgressStyle
-    @Default(.timerIconColorMode) var timerIconColorMode
-    @Default(.timerSolidColor) var timerSolidColor
-    @Default(.timerPresets) var timerPresets
     @Default(.showCapsLockLabel) var showCapsLockLabel
     @Default(.capsLockIndicatorTintMode) var capsLockTintMode
     @Default(.enableDoNotDisturbDetection) var enableDoNotDisturbDetection
     @Default(.showDoNotDisturbIndicator) var showDoNotDisturbIndicator
     @Default(.enableScreenRecordingDetection) var enableScreenRecordingDetection
     @Default(.enableCapsLockIndicator) var enableCapsLockIndicator
-    @Default(.enableExtensionLiveActivities) var enableExtensionLiveActivities
     @Default(.showStandardMediaControls) var showStandardMediaControls
     @Default(.externalDisplayStyle) var externalDisplayStyle
     @Default(.hideNonNotchUntilHover) var hideNonNotchUntilHover
-    @Default(.terminalStickyMode) var terminalStickyMode
     
     // Battery settings reactivity
     @Default(.showPowerStatusNotifications) var showPowerStatusNotifications
@@ -108,7 +83,7 @@ struct ContentView: View {
         let inlineSneakPeekActive = vm.notchState == .closed
             && (
                 coordinator.expandingView.show
-                    && (coordinator.expandingView.type == .music || coordinator.expandingView.type == .timer)
+                    && (coordinator.expandingView.type == .music)
                     && Defaults[.sneakPeekStyles] == .inline
                 || airPodsListeningModeSneakActive
             )
@@ -157,49 +132,7 @@ struct ContentView: View {
             }
         }
         
-        if coordinator.currentView == .timer {
-            return CGSize(width: baseSize.width, height: 250) // Extra height for timer presets
-        }
-        
-        if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
-            let preferredHeight = coordinator.notesLayoutState.preferredHeight
-            let resolvedHeight = max(baseSize.height, preferredHeight)
-            return CGSize(width: baseSize.width, height: resolvedHeight)
-        }
-
-        if coordinator.currentView == .terminal {
-            // Dynamic height: up to terminalMaxHeightFraction of screen, min 300pt
-            let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
-            let maxFraction = Defaults[.terminalMaxHeightFraction]
-            let terminalHeight = min(screenHeight * maxFraction, max(300, screenHeight * maxFraction))
-            return CGSize(width: baseSize.width, height: terminalHeight)
-        }
-
-        if coordinator.currentView == .extensionExperience {
-            if let preferredHeight = extensionTabPreferredHeight(baseSize: baseSize) {
-                return CGSize(width: baseSize.width, height: preferredHeight)
-            }
-            return baseSize
-        }
-
-        if enableMinimalisticUI,
-           coordinator.currentView == .home,
-           let preferredHeight = extensionMinimalisticPreferredHeight(baseSize: baseSize) {
-            return CGSize(width: baseSize.width, height: preferredHeight)
-        }
-        
-        guard coordinator.currentView == .stats else {
-            return baseSize
-        }
-        
-        let rows = statsRowCount()
-        if rows <= 1 {
-            return baseSize
-        }
-        
-        let additionalRows = max(rows - 1, 0)
-        let extraHeight = CGFloat(additionalRows) * statsAdditionalRowHeight
-        return CGSize(width: baseSize.width, height: baseSize.height + extraHeight)
+        return baseSize
     }
     
 
@@ -208,12 +141,10 @@ struct ContentView: View {
     @State private var lastHapticTime: Date = Date()
     @State private var hoverClickMonitor: Any?
     @State private var hoverClickLocalMonitor: Any?
-    @State private var stickyTerminalClickMonitor: Any?
     @State private var hiddenEdgeHoverPollingTask: Task<Void, Never>?
     @State private var isHoveringClosedMusicWaveformControl: Bool = false
 
     @State private var gestureProgress: CGFloat = .zero
-    @State private var skipGestureActiveDirection: MusicManager.SkipDirection?
     @State private var isMusicControlWindowVisible = false
     @State private var pendingMusicControlTask: Task<Void, Never>?
     @State private var musicControlHideTask: Task<Void, Never>?
@@ -264,7 +195,6 @@ struct ContentView: View {
     }
     
     private let zeroHeightHoverPadding: CGFloat = 10
-    private let statsAdditionalRowHeight: CGFloat = statsSecondRowContentHeight + statsGridSpacingHeight
     private let musicControlPauseGrace: TimeInterval = 5
     private let musicControlResumeDelay: TimeInterval = 0.24
 
@@ -579,24 +509,6 @@ struct ContentView: View {
                         }
                         openNotch()
                     }
-                    .conditionalModifier(Defaults[.enableGestures]) { view in
-                        view
-                            .panGesture(direction: .down) { translation, phase in
-                                handleDownGesture(translation: translation, phase: phase)
-                            }
-                            .panGesture(direction: .left) { translation, phase in
-                                handleSkipGesture(direction: .forward, translation: translation, phase: phase)
-                            }
-                            .panGesture(direction: .right) { translation, phase in
-                                handleSkipGesture(direction: .backward, translation: translation, phase: phase)
-                            }
-                    }
-            }
-            .conditionalModifier((Defaults[.closeGestureEnabled] || Defaults[.reverseScrollGestures]) && Defaults[.enableGestures] && interactionsEnabled) { view in
-                view
-                    .panGesture(direction: .up) { translation, phase in
-                        handleUpGesture(translation: translation, phase: phase)
-                    }
             }
             // Shadow bottom padding and hide-until-hover offset applied AFTER
             // interaction modifiers so .contentShape / .onHover only covers
@@ -617,15 +529,6 @@ struct ContentView: View {
                 }
             })
             .onChange(of: vm.notchState) { _, newState in
-                // Update smart monitoring based on notch state
-                if enableStatsFeature {
-                    let currentViewString = coordinator.currentView == .stats ? "stats" : "other"
-                    statsManager.updateMonitoringState(
-                        notchIsOpen: newState == .open,
-                        currentView: currentViewString
-                    )
-                }
-
                 // Reset hover state when notch state changes
                 if newState == .closed && isHovering {
                     withAnimation {
@@ -635,28 +538,8 @@ struct ContentView: View {
                 if newState != .closed {
                     isHoveringClosedMusicWaveformControl = false
                 }
-                if newState == .closed {
-                    removeStickyTerminalClickMonitor()
-                } else {
-                    // Install the outside-click monitor for terminal opens that don't
-                    // change `currentView` (e.g. shortcut re-opening with the terminal
-                    // tab already selected, where the cursor never enters the notch).
-                    syncStickyTerminalOutsideClickMonitor()
-                }
-                #if os(macOS)
-                if newState == .open {
-                    TimerControlWindowManager.shared.hide()
-                }
-                #endif
             }
             .onChange(of: vm.isBatteryPopoverActive) { _, newPopoverState in
-                runAfter(0.1) {
-                    if !newPopoverState && !isHovering && vm.notchState == .open && !shouldPreventAutoClose() {
-                        vm.close()
-                    }
-                }
-            }
-            .onChange(of: vm.isStatsPopoverActive) { _, newPopoverState in
                 runAfter(0.1) {
                     if !newPopoverState && !isHovering && vm.notchState == .open && !shouldPreventAutoClose() {
                         vm.close()
@@ -687,16 +570,6 @@ struct ContentView: View {
                         }
                     }
                 }
-            }
-            .onChange(of: coordinator.currentView) { _, newValue in
-                if enableStatsFeature {
-                    let currentViewString = newValue == .stats ? "stats" : "other"
-                    statsManager.updateMonitoringState(
-                        notchIsOpen: vm.notchState == .open,
-                        currentView: currentViewString
-                    )
-                }
-                syncStickyTerminalOutsideClickMonitor()
             }
             .sensoryFeedback(.alignment, trigger: haptics)
             .contextMenu {
@@ -755,9 +628,6 @@ struct ContentView: View {
                 // Deterministic teardown for borderless panels (`.onDisappear` is
                 // unreliable); the window-cleanup path calls this before closing.
                 vm.onViewTeardown = { performViewTeardown() }
-            }
-            .onChange(of: terminalStickyMode) { _, _ in
-                syncStickyTerminalOutsideClickMonitor()
             }
             .onChange(of: vm.notchState) { _, state in
                 if state == .open {
@@ -883,23 +753,15 @@ struct ContentView: View {
                       }()
                       let musicPairingEligible = closedMusicPairingEligible(hasActiveMusicSnapshot: hasActiveMusicSnapshot)
                       let musicSecondary = resolveMusicSecondaryLiveActivity(isMusicPairingEligible: musicPairingEligible)
-                      let extensionSecondaryPayloadID = extensionSecondaryPayloadID(for: musicSecondary)
-                      let extensionStandalonePayload = resolvedExtensionStandalonePayload(excluding: extensionSecondaryPayloadID)
                       let activeSneakPeekStyle = resolvedSneakPeekStyle()
                       let expansionMatchesSecondary: Bool = {
                           guard let musicSecondary else { return false }
                           switch musicSecondary {
-                          case .timer:
-                              return currentScreenExpansionType == .timer
-                          case .reminder:
-                              return currentScreenExpansionType == .reminder
                           case .recording:
                               return currentScreenExpansionType == .recording
                           case .focus:
                               return currentScreenExpansionType == .doNotDisturb
                           case .capsLock:
-                              return false
-                          case .extensionPayload:
                               return false
                           case .shelf:
                               return false
@@ -928,7 +790,7 @@ struct ContentView: View {
                             styleOverride: batteryModel.activeTemporaryHUDKind.map { resolvedBatteryNotificationStyle(for: $0) }
                         )
                         .id(batteryModel.activeTemporaryHUDToken)
-                      } else if isSneakPeekVisibleOnCurrentScreen && (Defaults[.inlineHUD] || isAirPodsListeningModeSneak) && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .timer) && (coordinator.sneakPeek.type != .reminder) && !coordinator.sneakPeek.type.isExtensionPayload && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
+                      } else if isSneakPeekVisibleOnCurrentScreen && (Defaults[.inlineHUD] || isAirPodsListeningModeSneak) && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(
                                   coordinator.sneakPeek.type == .capsLock
@@ -942,10 +804,6 @@ struct ContentView: View {
                           MusicLiveActivity(secondary: musicSecondary)
                               .id("closed-music-live-activity")
                               .transition(closedLiveActivitySwapTransition)
-                      } else if (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .timer) && vm.notchState == .closed && timerManager.isTimerActive && coordinator.timerLiveActivityEnabled && !vm.hideOnClosed {
-                          TimerLiveActivity()
-                      } else if (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .reminder) && vm.notchState == .closed && reminderManager.isActive && enableReminderLiveActivity && !vm.hideOnClosed {
-                          ReminderLiveActivity()
                       } else if (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .recording) && vm.notchState == .closed && (recordingManager.isRecording || !recordingManager.isRecorderIdle) && Defaults[.enableScreenRecordingDetection] && !vm.hideOnClosed && !musicPairingEligible {
                           RecordingLiveActivity()
                       } else if (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .download) && vm.notchState == .closed && downloadManager.isDownloading && Defaults[.enableDownloadListener] && !vm.hideOnClosed {
@@ -962,17 +820,6 @@ struct ContentView: View {
                             .transition(closedLiveActivitySwapTransition)
                     } else if (!isCurrentScreenExpansionVisible || currentScreenExpansionType == .privacy) && vm.notchState == .closed && privacyManager.hasAnyIndicator && (Defaults[.enableCameraDetection] || Defaults[.enableMicrophoneDetection]) && !vm.hideOnClosed {
                         PrivacyLiveActivity()
-                      } else if let extensionPayload = extensionStandalonePayload {
-                          let layout = extensionStandaloneLayout(
-                              for: extensionPayload,
-                              notchHeight: vm.effectiveClosedNotchHeight,
-                              isHovering: isHovering
-                          )
-                          ExtensionLiveActivityStandaloneView(
-                              payload: extensionPayload,
-                              layout: layout,
-                              isHovering: isHovering
-                          )
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && !shelfState.isEmpty && !vm.hideOnClosed && !lockScreenManager.isLocked && !enableMinimalisticUI {
                           ShelfInlineLiveActivity()
                               .transition(.opacity.animation(.smooth(duration: 0.25)))
@@ -986,7 +833,7 @@ struct ContentView: View {
                        }
                       
                       if isSneakPeekVisibleOnCurrentScreen {
-                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .timer) && (coordinator.sneakPeek.type != .reminder) && (coordinator.sneakPeek.type != .capsLock) && !coordinator.sneakPeek.type.isExtensionPayload && !Defaults[.inlineHUD] && !isAirPodsListeningModeSneak && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
+                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && (coordinator.sneakPeek.type != .capsLock) && !Defaults[.inlineHUD] && !isAirPodsListeningModeSneak && ((coordinator.sneakPeek.type != .volume && coordinator.sneakPeek.type != .brightness && coordinator.sneakPeek.type != .backlight) || vm.notchState == .closed) {
                               SystemEventIndicatorModifier(eventType: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, sendEventBack: { _ in
                                   //
                               })
@@ -1007,67 +854,6 @@ struct ContentView: View {
                                   .padding(.bottom, 10)
                               }
                           }
-                          // Timer sneak peek
-                          else if coordinator.sneakPeek.type == .timer {
-                              if !vm.hideOnClosed && activeSneakPeekStyle == .standard {
-                                  HStack(alignment: .center) {
-                                      Image(systemName: "timer")
-                                      GeometryReader { geo in
-                                          MarqueeText(.constant(timerManager.timerName + " - " + timerManager.formattedRemainingTime()), textColor: timerManager.timerColor, minDuration: 1, frameWidth: geo.size.width)
-                                      }
-                                  }
-                                  .foregroundStyle(timerManager.timerColor)
-                                  .padding(.bottom, 10)
-                              }
-                          }
-                          else if coordinator.sneakPeek.type == .reminder {
-                              if !vm.hideOnClosed && activeSneakPeekStyle == .standard, let reminder = reminderManager.activeReminder {
-                                  GeometryReader { geo in
-                                      let chipColor = Color(nsColor: reminder.event.calendar.color).ensureMinimumBrightness(factor: 0.7)
-                                      HStack(spacing: 6) {
-                                          RoundedRectangle(cornerRadius: 2)
-                                              .fill(chipColor)
-                                              .frame(width: 8, height: 12)
-                                          MarqueeText(
-                                              .constant(reminderSneakPeekText(for: reminder, now: reminderManager.currentDate)),
-                                              textColor: reminderColor(for: reminder, now: reminderManager.currentDate),
-                                              minDuration: 1,
-                                              frameWidth: max(0, geo.size.width - 14)
-                                          )
-                                      }
-                                  }
-                                  .padding(.bottom, 10)
-                              }
-                          }
-                          // Extension live activity sneak peek
-                          else if case let .extensionLiveActivity(bundleID, activityID) = coordinator.sneakPeek.type {
-                              if !vm.hideOnClosed && activeSneakPeekStyle == .standard {
-                                  let payload = extensionLiveActivityManager.payload(bundleIdentifier: bundleID, activityID: activityID)
-                                  let descriptor = payload?.descriptor
-                                  let accent = (descriptor?.accentColor.swiftUIColor ?? coordinator.sneakPeek.accentColor ?? .gray)
-                                      .ensureMinimumBrightness(factor: 0.7)
-                                  GeometryReader { geo in
-                                      HStack(spacing: 6) {
-                                          RoundedRectangle(cornerRadius: 2)
-                                              .fill(accent)
-                                              .frame(width: 8, height: 12)
-                                          MarqueeText(
-                                              .constant(
-                                                  extensionSneakPeekText(
-                                                      preferredTitle: coordinator.sneakPeek.title,
-                                                      preferredSubtitle: coordinator.sneakPeek.subtitle,
-                                                      descriptor: descriptor
-                                                  )
-                                              ),
-                                              textColor: accent,
-                                              minDuration: 1,
-                                              frameWidth: max(0, geo.size.width - 14)
-                                          )
-                                      }
-                                  }
-                                  .padding(.bottom, 10)
-                              }
-                          }
                       }
                   }
               }
@@ -1085,26 +871,6 @@ struct ContentView: View {
                                   NotchHomeView(albumArtNamespace: albumArtNamespace)
                               case .shelf:
                                   NotchShelfView()
-                              case .timer:
-                                  NotchTimerView()
-                              case .stats:
-                                  NotchStatsView()
-                              case .llmUsage:
-                                  NotchLLMUsageView()
-                              case .colorPicker:
-                                  NotchColorPickerView()
-                            case .notes:
-                                NotchNotesView()
-                            case .clipboard:
-                                NotchNotesView()
-                            case .terminal:
-                                NotchTerminalView()
-                            case .extensionExperience:
-                                if let payload = currentExtensionTabPayload() {
-                                    ExtensionNotchExperienceTabView(payload: payload)
-                                } else {
-                                    NotchHomeView(albumArtNamespace: albumArtNamespace)
-                                }
                           }
                       }
                       .id(coordinator.currentView)
@@ -1118,54 +884,6 @@ struct ContentView: View {
               .animation(.smooth(duration: 0.3), value: coordinator.currentView)
           }
       }
-
-    private func reminderColor(for reminder: ReminderLiveActivityManager.ReminderEntry, now: Date) -> Color {
-        if isReminderCritical(reminder, now: now) {
-            return .red
-        }
-        return Color(nsColor: reminder.event.calendar.color).ensureMinimumBrightness(factor: 0.7)
-    }
-
-    private func reminderSneakPeekText(for entry: ReminderLiveActivityManager.ReminderEntry, now: Date) -> String {
-        let title = entry.event.title.isEmpty ? "Upcoming Reminder" : entry.event.title
-        let remaining = max(entry.event.start.timeIntervalSince(now), 0)
-        let window = TimeInterval(Defaults[.reminderSneakPeekDuration])
-
-        if window > 0 && remaining <= window {
-            return "\(title) • \(String(format: String(localized: "now")))"
-        }
-
-        let minutes = Int(ceil(remaining / 60))
-        let timeString = reminderTimeFormatter.string(from: entry.event.start)
-
-        if minutes <= 0 {
-            return "\(title) • \(String(format: String(localized: "now"))) • \(timeString)"
-        } else if minutes == 1 {
-            return "\(title) • \(String(format: String(localized: "in %@"), String(localized: "1 min"))) • \(timeString)"
-        } else {
-            return "\(title) • \(String(format: String(localized: "in %lld"), (minutes))) \(String(format: String(localized: "min plural"))) • \(timeString)"
-        }
-    }
-
-    private func extensionSneakPeekText(preferredTitle: String, preferredSubtitle: String?, descriptor: AtollLiveActivityDescriptor?) -> String {
-        let trimmedPreferredTitle = preferredTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let descriptorTitle = descriptor?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Extension"
-        let title = trimmedPreferredTitle.isEmpty ? descriptorTitle : trimmedPreferredTitle
-
-        let trimmedPreferredSubtitle = preferredSubtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let descriptorSubtitle = descriptor?.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let subtitle = !trimmedPreferredSubtitle.isEmpty ? trimmedPreferredSubtitle : descriptorSubtitle
-
-        guard !subtitle.isEmpty else { return title }
-        return "\(title) • \(subtitle)"
-    }
-
-    private let reminderTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
 
     @ViewBuilder
     func DynamicIslandFaceAnimation() -> some View {
@@ -1193,7 +911,7 @@ struct ContentView: View {
         let centerBaseWidth = max(rawCenterBaseWidth, 96)
         let inlineSneakPeekActive = (
             coordinator.expandingView.show &&
-            (coordinator.expandingView.type == .music || coordinator.expandingView.type == .timer) &&
+            (coordinator.expandingView.type == .music) &&
             Defaults[.enableSneakPeek] &&
             Defaults[.sneakPeekStyles] == .inline
         )
@@ -1252,23 +970,7 @@ struct ContentView: View {
                                 .foregroundStyle(Defaults[.coloredSpectrogram] ? Color(nsColor: musicManager.avgColor) : Color.gray)
                                 .padding(.trailing, 8)
                                 .opacity((coordinator.expandingView.show && coordinator.expandingView.type == .music && Defaults[.enableSneakPeek] && Defaults[.sneakPeekStyles] == .inline) ? 1 : 0)
-                        } else if(coordinator.expandingView.show && coordinator.expandingView.type == .timer) {
-                            MarqueeText(
-                                .constant(timerManager.timerName),
-                                textColor: timerManager.timerColor,
-                                minDuration: 0.4,
-                                frameWidth: max(0, (effectiveCenterWidth - vm.closedNotchSize.width) / 2 - 12)
-                            )
-                            .padding(.leading, 8)
-                            .opacity((coordinator.expandingView.show && Defaults[.enableSneakPeek] && Defaults[.sneakPeekStyles] == .inline) ? 1 : 0)
-                            Spacer(minLength: vm.closedNotchSize.width)
-                            Text(timerManager.formattedRemainingTime())
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .foregroundStyle(timerManager.timerColor)
-                                .padding(.trailing, 8)
-                                .opacity((coordinator.expandingView.show && coordinator.expandingView.type == .timer && Defaults[.enableSneakPeek] && Defaults[.sneakPeekStyles] == .inline) ? 1 : 0)
-                        } else if Defaults[.showSongMetadataInClosedNotch] && isNonNotchScreen && !musicManager.songTitle.isEmpty {
+} else if Defaults[.showSongMetadataInClosedNotch] && isNonNotchScreen && !musicManager.songTitle.isEmpty {
                             MarqueeText(
                                 .constant("\(musicManager.songTitle) • \(musicManager.artistName)"),
                                 textColor: Defaults[.coloredSpectrogram] ? Color(nsColor: musicManager.avgColor) : Color.gray,
@@ -1304,14 +1006,6 @@ struct ContentView: View {
     }
 
     private func resolveMusicSecondaryLiveActivity(isMusicPairingEligible: Bool = true) -> MusicSecondaryLiveActivity? {
-        if coordinator.timerLiveActivityEnabled && timerManager.isTimerActive {
-            return .timer
-        }
-
-        if enableReminderLiveActivity, reminderManager.isActive, let reminder = reminderManager.activeReminder {
-            return .reminder(reminder)
-        }
-
         if enableScreenRecordingDetection && (recordingManager.isRecording || !recordingManager.isRecorderIdle) {
             return .recording
         }
@@ -1323,10 +1017,6 @@ struct ContentView: View {
 
         if enableCapsLockIndicator && capsLockManager.isCapsLockActive {
             return .capsLock(showLabel: showCapsLockLabel)
-        }
-
-        if isMusicPairingEligible, let extensionPayload = resolvedExtensionMusicPayload() {
-            return .extensionPayload(extensionPayload)
         }
 
         // Shelf: show file count as lowest-priority secondary
@@ -1341,65 +1031,14 @@ struct ContentView: View {
         guard let secondary else { return baseWidth }
 
         switch secondary {
-        case .timer:
-            return timerRightWingWidth(baseWidth: baseWidth, centerBaseWidth: centerBaseWidth)
-        case .reminder(let entry):
-            return reminderRightWingWidth(for: entry, baseWidth: baseWidth, notchHeight: notchHeight, now: reminderManager.currentDate)
         case .capsLock(let showLabel):
             return showLabel ? scaledWingWidth(baseWidth: baseWidth, centerBaseWidth: centerBaseWidth, factor: 0.4, extra: 12) : baseWidth
         case .focus:
             return focusRightWingWidth(baseWidth: baseWidth)
         case .recording:
             return recordingRightWingWidth(baseWidth: baseWidth)
-        case .extensionPayload(let payload):
-            let maxWidth = baseWidth + centerBaseWidth * 0.6
-            return ExtensionLayoutMetrics.trailingWidth(for: payload, baseWidth: baseWidth, maxWidth: maxWidth)
         case .shelf:
             return baseWidth
-        }
-    }
-
-    private func timerRightWingWidth(baseWidth: CGFloat, centerBaseWidth: CGFloat) -> CGFloat {
-        if timerShowsCountdown {
-            return timerCountdownWingWidth(baseWidth: baseWidth)
-        }
-
-        let showsProgress = timerShowsProgress
-        let usesRingProgress = timerProgressStyle == .ring
-
-        switch (showsProgress, usesRingProgress) {
-        case (true, true):
-            return scaledWingWidth(baseWidth: baseWidth, centerBaseWidth: centerBaseWidth, factor: 0.46, extra: 18)
-        case (true, false):
-            return scaledWingWidth(baseWidth: baseWidth, centerBaseWidth: centerBaseWidth, factor: 0.52, extra: 24)
-        case (false, _):
-            return scaledWingWidth(baseWidth: baseWidth, centerBaseWidth: centerBaseWidth, factor: 0.38, extra: 12)
-        }
-    }
-
-    private func timerCountdownWingWidth(baseWidth: CGFloat) -> CGFloat {
-        let padding: CGFloat = 18
-        let ringWidth: CGFloat = (timerShowsProgress && timerProgressStyle == .ring) ? 30 : 0
-        let spacing: CGFloat = (ringWidth > 0) ? 8 : 0
-        let countdownText = timerManager.formattedRemainingTime()
-        let countdownWidth = TimerSupplementMetrics.countdownFrameWidth(for: countdownText)
-        return max(baseWidth, padding + ringWidth + spacing + countdownWidth)
-    }
-
-    private func reminderRightWingWidth(for entry: ReminderLiveActivityManager.ReminderEntry, baseWidth: CGFloat, notchHeight: CGFloat, now: Date) -> CGFloat {
-        let padding: CGFloat = 16
-        switch reminderPresentationStyle {
-        case .ringCountdown:
-            let diameter = ReminderSupplementMetrics.ringDiameter(for: notchHeight)
-            return max(baseWidth, padding + diameter)
-        case .digital:
-            let countdownText = ReminderSupplementMetrics.digitalCountdownText(for: entry, now: now)
-            let width = ReminderSupplementMetrics.digitalFrameWidth(for: countdownText)
-            return max(baseWidth, padding + width)
-        case .minutes:
-            let minutesText = ReminderSupplementMetrics.minutesCountdownText(for: entry, now: now)
-            let width = ReminderSupplementMetrics.minutesFrameWidth(for: minutesText)
-            return max(baseWidth, padding + width)
         }
     }
 
@@ -1429,15 +1068,6 @@ struct ContentView: View {
                     .fill(Color.black)
 
                 switch secondary {
-                case .timer:
-                    Image(systemName: "timer")
-                        .font(.system(size: badgeSize * 0.55, weight: .semibold))
-                        .foregroundStyle(timerAccentColor)
-                case .reminder(let entry):
-                    let accent = reminderColor(for: entry, now: reminderManager.currentDate)
-                    Image(systemName: "clock")
-                        .font(.system(size: badgeSize * 0.55, weight: .semibold))
-                        .foregroundStyle(accent)
                 case .focus(let mode):
                     mode.resolvedActiveIcon(usePrivateSymbol: true)
                         .renderingMode(.template)
@@ -1452,12 +1082,6 @@ struct ContentView: View {
                     Image(systemName: "capslock.fill")
                         .font(.system(size: badgeSize * 0.5, weight: .semibold))
                         .foregroundStyle(capsLockTintMode.color)
-                case .extensionPayload(let payload):
-                    ExtensionBadgeIconView(
-                        descriptor: payload.descriptor.leadingIcon,
-                        accent: payload.descriptor.accentColor.swiftUIColor,
-                        size: badgeSize
-                    )
                 case .shelf:
                     Image(systemName: "tray.and.arrow.down.fill")
                         .font(.system(size: badgeSize * 0.50, weight: .semibold))
@@ -1491,23 +1115,6 @@ struct ContentView: View {
     @ViewBuilder
     private func musicRightWing(for secondary: MusicSecondaryLiveActivity?, notchHeight: CGFloat, trailingWidth: CGFloat) -> some View {
         switch secondary {
-        case .timer:
-            MusicTimerSupplementView(
-                timerManager: timerManager,
-                accentColor: timerAccentColor,
-                showsCountdown: timerShowsCountdown,
-                showsProgress: timerShowsProgress,
-                progressStyle: timerProgressStyle,
-                notchHeight: notchHeight
-            )
-        case .reminder(let entry):
-            MusicReminderSupplementView(
-                entry: entry,
-                now: reminderManager.currentDate,
-                style: reminderPresentationStyle,
-                accent: reminderColor(for: entry, now: reminderManager.currentDate),
-                notchHeight: notchHeight
-            )
         case .capsLock(let showLabel):
             if showLabel {
                 MusicCapsLockLabelView(color: capsLockTintMode.color)
@@ -1518,8 +1125,6 @@ struct ContentView: View {
             spectrumView(forceSpectrum: true)
         case .recording:
             spectrumView(forceSpectrum: true, trailingInset: 6)
-        case .extensionPayload(let payload):
-            ExtensionMusicWingView(payload: payload, notchHeight: notchHeight, trailingWidth: trailingWidth)
         case .shelf(let count):
             // File count badge: bold white number, like a minimal pill
             Text("\(count)")
@@ -1589,264 +1194,6 @@ struct ContentView: View {
         }
     }
 
-    private var timerAccentColor: Color {
-        switch timerIconColorMode {
-        case .adaptive:
-            if let presetId = timerManager.activePresetId,
-               let preset = timerPresets.first(where: { $0.id == presetId }) {
-                return preset.color
-            }
-            return timerManager.timerColor
-        case .solid:
-            return timerSolidColor
-        }
-    }
-
-    private func reminderIconName(for reminder: ReminderLiveActivityManager.ReminderEntry, now: Date) -> String {
-        isReminderCritical(reminder, now: now) ? ReminderLiveActivityManager.criticalIconName : ReminderLiveActivityManager.standardIconName
-    }
-
-    private func isReminderCritical(_ reminder: ReminderLiveActivityManager.ReminderEntry, now: Date) -> Bool {
-        let window = TimeInterval(Defaults[.reminderSneakPeekDuration])
-        guard window > 0 else { return false }
-        let remaining = reminder.event.start.timeIntervalSince(now)
-        return remaining > 0 && remaining <= window
-    }
-
-    private func extensionSecondaryPayloadID(for secondary: MusicSecondaryLiveActivity?) -> String? {
-        guard case let .extensionPayload(payload) = secondary else { return nil }
-        return payload.id
-    }
-
-    private func resolvedExtensionMusicPayload() -> ExtensionLiveActivityPayload? {
-        let candidates = extensionLiveActivityManager.sortedActivities(for: true)
-        guard let payload = candidates.first else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "no eligible coexistence payloads",
-                pendingCount: candidates.count
-            )
-            ExtensionRoutingDiagnostics.shared.reset(.music)
-            return nil
-        }
-
-        guard enableExtensionLiveActivities else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "feature toggle disabled",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard closedMusicContentEnabled else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "music content disabled",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard vm.notchState == .closed else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "notch is \(vm.notchState)",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard !vm.hideOnClosed else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "hideOnClosed engaged (fullscreen)",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard !lockScreenManager.isLocked else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "lock screen currently active",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard !isMusicHUDDeferredAfterUnlock else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "waiting for lock screen unlock animation to finish",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard coordinator.musicLiveActivityEnabled else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .music,
-                reason: "music live activity disabled in settings",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        ExtensionRoutingDiagnostics.shared.logDisplay(.music, payload: payload)
-        return payload
-    }
-
-    private func resolvedExtensionStandalonePayload(excluding musicPayloadID: String?) -> ExtensionLiveActivityPayload? {
-        let baseCandidates = extensionLiveActivityManager.sortedActivities()
-        guard !baseCandidates.isEmpty else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "no active extension payloads",
-                pendingCount: 0
-            )
-            ExtensionRoutingDiagnostics.shared.reset(.standalone)
-            return nil
-        }
-
-        let candidates = baseCandidates.filter { $0.id != musicPayloadID }
-        guard let payload = candidates.first else {
-            if let musicPayloadID {
-                ExtensionRoutingDiagnostics.shared.logSuppression(
-                    .standalone,
-                    reason: "all pending payloads are paired with music (\(musicPayloadID))",
-                    pendingCount: baseCandidates.count
-                )
-            } else {
-                ExtensionRoutingDiagnostics.shared.logSuppression(
-                    .standalone,
-                    reason: "no standalone payloads after filtering",
-                    pendingCount: baseCandidates.count
-                )
-                ExtensionRoutingDiagnostics.shared.reset(.standalone)
-            }
-            return nil
-        }
-
-        guard enableExtensionLiveActivities else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "feature toggle disabled",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard vm.notchState == .closed else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "notch is \(vm.notchState)",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard !vm.hideOnClosed else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "hideOnClosed engaged (fullscreen)",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard !lockScreenManager.isLocked else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "lock screen currently active",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard vm.effectiveClosedNotchHeight > 0 else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "effective notch height is \(vm.effectiveClosedNotchHeight)",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        guard !isCurrentScreenExpansionVisible else {
-            ExtensionRoutingDiagnostics.shared.logSuppression(
-                .standalone,
-                reason: "expanding view \(String(describing: currentScreenExpansionType ?? coordinator.expandingView.type)) visible",
-                pendingCount: candidates.count
-            )
-            return nil
-        }
-
-        ExtensionRoutingDiagnostics.shared.logDisplay(.standalone, payload: payload)
-        return payload
-    }
-
-    private func extensionStandaloneLayout(for payload: ExtensionLiveActivityPayload, notchHeight: CGFloat, isHovering: Bool) -> ExtensionStandaloneLayout {
-        let outerHeight = notchHeight
-        let contentHeight = max(0, notchHeight - (isHovering ? 0 : 12))
-        let leadingWidth = max(contentHeight, 44)
-        let centerWidth: CGFloat = max(vm.closedNotchSize.width + (isHovering ? 8 : 0), 96)
-        let trailingWidth = ExtensionLayoutMetrics.trailingWidth(
-            for: payload,
-            baseWidth: leadingWidth,
-            maxWidth: leadingWidth + centerWidth * 0.6
-        )
-        let totalWidth = leadingWidth + centerWidth + trailingWidth
-        return ExtensionStandaloneLayout(
-            totalWidth: totalWidth,
-            outerHeight: outerHeight,
-            contentHeight: contentHeight,
-            leadingWidth: leadingWidth,
-            centerWidth: centerWidth,
-            trailingWidth: trailingWidth
-        )
-    }
-
-    @MainActor
-    private final class ExtensionRoutingDiagnostics {
-        static let shared = ExtensionRoutingDiagnostics()
-
-        enum Channel: Hashable {
-            case music
-            case standalone
-
-            var label: String {
-                switch self {
-                case .music:
-                    return "music pairing"
-                case .standalone:
-                    return "standalone notch"
-                }
-            }
-        }
-
-        private var lastMessages: [Channel: String] = [:]
-
-        func logSuppression(_ channel: Channel, reason: String, pendingCount: Int) {
-            log("Extension \(channel.label) suppressed: \(reason) (pending: \(pendingCount))", channel: channel)
-        }
-
-        func logDisplay(_ channel: Channel, payload: ExtensionLiveActivityPayload) {
-            log("Extension \(channel.label) showing \(payload.descriptor.id) from \(payload.bundleIdentifier)", channel: channel)
-        }
-
-        func reset(_ channel: Channel) {
-            lastMessages.removeValue(forKey: channel)
-        }
-
-        private func log(_ message: String, channel: Channel) {
-            guard Defaults[.extensionDiagnosticsLoggingEnabled] else { return }
-            guard lastMessages[channel] != message else { return }
-            lastMessages[channel] = message
-            Logger.log(message, category: .extensions)
-        }
-    }
-    
     @ViewBuilder
     var dragDetector: some View {
         if lockScreenManager.isLocked {
@@ -1938,7 +1285,6 @@ struct ContentView: View {
     private func performViewTeardown() {
         hoverTask?.cancel()
         stopHoverClickMonitor()
-        removeStickyTerminalClickMonitor()
         stopHiddenEdgeHoverPolling()
         cancelMusicControlWindowSync()
         hideMusicControlWindow()
@@ -2021,43 +1367,6 @@ struct ContentView: View {
     /// Installs the global outside-click monitor whenever the Terminal tab is open
     /// (e.g. keyboard-opened terminal), regardless of sticky mode.
     ///
-    /// Sticky mode only controls whether the terminal closes when the cursor leaves
-    /// the notch (see `shouldPreventAutoClose`).  An outside click should always close
-    /// the terminal — this covers the case where the terminal is opened via the
-    /// shortcut and the cursor never enters the notch, so there's no hover-out event
-    /// to trigger the normal auto-close.
-    ///
-    /// While the cursor is hovering inside the notch, hover handling owns close
-    /// behavior, so the monitor is not installed; it is re-synced on hover-out.
-    private func syncStickyTerminalOutsideClickMonitor() {
-        guard vm.notchState == .open, coordinator.currentView == .terminal, !isHovering else {
-            removeStickyTerminalClickMonitor()
-            return
-        }
-        installStickyTerminalClickMonitor()
-    }
-
-    private func installStickyTerminalClickMonitor() {
-        guard stickyTerminalClickMonitor == nil else { return }
-        stickyTerminalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak vm] _ in
-            Task { @MainActor in
-                guard let vm, vm.notchState == .open else { return }
-                let clickLocation = NSEvent.mouseLocation
-                if self.isPointInsideNotchWindow(clickLocation) {
-                    return
-                }
-                vm.close()
-            }
-        }
-    }
-
-    private func removeStickyTerminalClickMonitor() {
-        if let stickyTerminalClickMonitor {
-            NSEvent.removeMonitor(stickyTerminalClickMonitor)
-            self.stickyTerminalClickMonitor = nil
-        }
-    }
-
     // MARK: - Hover Management
     
     /// Handle hover state changes with debouncing
@@ -2066,7 +1375,6 @@ struct ContentView: View {
 
         if hovering {
             startHoverClickMonitor()
-            removeStickyTerminalClickMonitor()
         } else {
             stopHoverClickMonitor()
             if isHoveringClosedMusicWaveformControl {
@@ -2085,11 +1393,9 @@ struct ContentView: View {
                 triggerHapticIfAllowed()
             }
 
-            let shouldFocusTimerTab = enableTimerFeature && timerDisplayMode == .tab && timerManager.isTimerActive && !enableMinimalisticUI
-
             guard vm.notchState == .closed,
                 !isSneakPeekVisibleOnCurrentScreen,
-                (Defaults[.openNotchOnHover] || shouldFocusTimerTab) else { return }
+                Defaults[.openNotchOnHover] else { return }
 
             hoverTask = Task {
                 try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]))
@@ -2101,11 +1407,6 @@ struct ContentView: View {
                           !self.isSneakPeekVisibleOnCurrentScreen,
                           !self.coordinator.isHoverOpenSuppressed else { return }
 
-                    if shouldFocusTimerTab {
-                        withAnimation(.smooth) {
-                            self.coordinator.currentView = .timer
-                        }
-                    }
                     self.openNotch()
                 }
             }
@@ -2121,12 +1422,6 @@ struct ContentView: View {
 
                     if self.vm.notchState == .open && !self.shouldPreventAutoClose() {
                         self.vm.close()
-                    } else if self.vm.notchState == .open
-                                && Defaults[.terminalStickyMode]
-                                && self.coordinator.currentView == .terminal {
-                        // Re-sync monitor state through one code path to avoid
-                        // monitor lifecycle races between hover and state updates.
-                        self.syncStickyTerminalOutsideClickMonitor()
                     }
                 }
             }
@@ -2148,17 +1443,12 @@ struct ContentView: View {
     
     // Helper function to check if any popovers are active
     private func hasAnyActivePopovers() -> Bool {
-     return vm.isBatteryPopoverActive || 
-         vm.isClipboardPopoverActive || 
-         vm.isColorPickerPopoverActive || 
-         vm.isStatsPopoverActive ||
-         vm.isTimerPopoverActive ||
-         vm.isMediaOutputPopoverActive ||
-         vm.isReminderPopoverActive
+     return vm.isBatteryPopoverActive ||
+         vm.isMediaOutputPopoverActive
     }
 
     private func shouldPreventAutoClose() -> Bool {
-        coordinator.firstLaunch || hasAnyActivePopovers() || vm.isAutoCloseSuppressed || SharingStateManager.shared.preventNotchClose || (Defaults[.terminalStickyMode] && coordinator.currentView == .terminal)
+        coordinator.firstLaunch || hasAnyActivePopovers() || vm.isAutoCloseSuppressed || SharingStateManager.shared.preventNotchClose
     }
     
     // Helper to prevent rapid haptic feedback
@@ -2170,202 +1460,6 @@ struct ContentView: View {
         }
     }
     
-    // Helper to check if stats tab has 4+ graphs (needs expanded height)
-    private func enabledStatsGraphCount() -> Int {
-        var enabledCount = 0
-        if showCpuGraph { enabledCount += 1 }
-        if showMemoryGraph { enabledCount += 1 }
-        if showGpuGraph { enabledCount += 1 }
-        if showNetworkGraph { enabledCount += 1 }
-        if showDiskGraph { enabledCount += 1 }
-        return enabledCount
-    }
-
-    private func statsRowCount() -> Int {
-        let count = enabledStatsGraphCount()
-        if count == 0 { return 0 }
-        return count <= 3 ? 1 : 2
-    }
-
-    private func currentExtensionTabPayload() -> ExtensionNotchExperiencePayload? {
-        guard Defaults[.enableThirdPartyExtensions],
-              Defaults[.enableExtensionNotchExperiences],
-              Defaults[.enableExtensionNotchTabs] else {
-            return nil
-        }
-        if let selectedID = coordinator.selectedExtensionExperienceID,
-           let payload = extensionNotchExperienceManager.payload(experienceID: selectedID) {
-            return payload
-        }
-        return extensionNotchExperienceManager.highestPriorityTabPayload()
-    }
-
-    private func extensionTabPreferredHeight(baseSize: CGSize) -> CGFloat? {
-        guard let preferred = currentExtensionTabPayload()?.descriptor.tab?.preferredHeight else {
-            return nil
-        }
-        let minHeight = baseSize.height
-        let maxHeight = baseSize.height + statsAdditionalRowHeight
-        return min(max(preferred, minHeight), maxHeight)
-    }
-
-    // Estimate the height required for minimalistic overrides (notably web content) and clamp it to the notch bounds.
-    private func extensionMinimalisticPreferredHeight(baseSize: CGSize) -> CGFloat? {
-        guard let configuration = extensionNotchExperienceManager.minimalisticReplacementPayload()?.descriptor.minimalistic else {
-            return nil
-        }
-
-        let minHeight = baseSize.height
-        let maxHeight = baseSize.height + statsAdditionalRowHeight
-
-        var contentHeight: CGFloat = 0
-        var blockCount = 0
-
-        if configuration.headline != nil {
-            contentHeight += 24
-            blockCount += 1
-        }
-
-        if configuration.subtitle != nil {
-            contentHeight += 20
-            blockCount += 1
-        }
-
-        if !configuration.sections.isEmpty {
-            let sectionEstimate: CGFloat = 98
-            contentHeight += CGFloat(configuration.sections.count) * sectionEstimate
-            blockCount += configuration.sections.count
-        }
-
-        if let webDescriptor = configuration.webContent {
-            contentHeight += webDescriptor.preferredHeight
-            blockCount += 1
-        }
-
-        guard blockCount > 0 else { return nil }
-
-        let spacingAllowance = CGFloat(max(blockCount - 1, 0)) * 16
-        let topPadding: CGFloat = 10
-        let bottomPadding: CGFloat = configuration.webContent == nil ? 10 : 0
-        let estimatedHeight = contentHeight + spacingAllowance + topPadding + bottomPadding
-
-        let clampedHeight = min(max(estimatedHeight, minHeight), maxHeight)
-        return clampedHeight > minHeight ? clampedHeight : nil
-    }
-    
-    // MARK: - Gesture Handling
-    
-    private func handleDownGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        handleScrollGesture(isDownward: true, translation: translation, phase: phase)
-    }
-    
-    private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        handleScrollGesture(isDownward: false, translation: translation, phase: phase)
-    }
-
-    private func handleScrollGesture(isDownward: Bool, translation: CGFloat, phase: NSEvent.Phase) {
-        let reverse = Defaults[.reverseScrollGestures]
-        let shouldOpen = isDownward ? !reverse : reverse
-
-        if shouldOpen {
-            handleOpenScrollGesture(translation: translation, phase: phase)
-        } else {
-            guard Defaults[.closeGestureEnabled] else { return }
-            handleCloseScrollGesture(translation: translation, phase: phase)
-        }
-    }
-
-    private func handleOpenScrollGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .closed else { return }
-
-        withAnimation(.smooth) {
-            gestureProgress = (translation / Defaults[.gestureSensitivity]) * 20
-        }
-
-        if phase == .ended {
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-            }
-        }
-
-        if translation > Defaults[.gestureSensitivity] {
-            if Defaults[.enableHaptics] {
-                triggerHapticIfAllowed()
-            }
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-            }
-            openNotch()
-        }
-    }
-
-    private func handleCloseScrollGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .open, !vm.isHoveringCalendar, !vm.isScrollGestureActive else { return }
-
-        withAnimation(.smooth) {
-            gestureProgress = (translation / Defaults[.gestureSensitivity]) * -20
-        }
-
-        if phase == .ended {
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-            }
-        }
-
-        if translation > Defaults[.gestureSensitivity] {
-            withAnimation(.smooth) {
-                gestureProgress = .zero
-                isHovering = false
-            }
-            vm.close()
-
-            if Defaults[.enableHaptics] {
-                triggerHapticIfAllowed()
-            }
-        }
-    }
-
-    private func handleSkipGesture(direction: MusicManager.SkipDirection, translation: CGFloat, phase: NSEvent.Phase) {
-        if phase == .ended {
-            skipGestureActiveDirection = nil
-            return
-        }
-
-        guard canPerformSkipGesture() else {
-            skipGestureActiveDirection = nil
-            return
-        }
-
-        if skipGestureActiveDirection == nil && translation > Defaults[.gestureSensitivity] {
-            let effectiveDirection: MusicManager.SkipDirection
-            if Defaults[.reverseSwipeGestures] {
-                effectiveDirection = direction == .forward ? .backward : .forward
-            } else {
-                effectiveDirection = direction
-            }
-            skipGestureActiveDirection = effectiveDirection
-
-            if Defaults[.enableHaptics] {
-                triggerHapticIfAllowed()
-            }
-
-            musicManager.handleSkipGesture(direction: effectiveDirection)
-        }
-    }
-
-    private func canPerformSkipGesture() -> Bool {
-        let canSkipInOpenHome = vm.notchState == .open && coordinator.currentView == .home
-        let canSkipInClosedMusic = !Defaults[.openNotchOnHover] && isClosedMusicGestureContext
-
-        return enableHorizontalMusicGestures
-            && (canSkipInOpenHome || canSkipInClosedMusic)
-            && (!musicManager.isPlayerIdle || musicManager.bundleIdentifier != nil)
-            && !lockScreenManager.isLocked
-            && !hasAnyActivePopovers()
-            && !vm.isHoveringCalendar
-            && !vm.isScrollGestureActive
-    }
-
     private func handleMusicControlPlaybackChange(isPlaying: Bool) {
         guard musicControlWindowEnabled else { return }
 
@@ -2636,252 +1730,35 @@ struct ContentView: View {
         guard isSneakPeekVisibleOnCurrentScreen else { return false }
         let style = resolvedSneakPeekStyle()
         
-        // Check for extension sneak peek
-        if case .extensionLiveActivity = coordinator.sneakPeek.type {
-            return vm.notchState == .closed && style == .standard
-        }
-        
         // Original logic for other types
         let isMusicSneak = coordinator.sneakPeek.type == .music && vm.notchState == .closed && !vm.hideOnClosed && style == .standard
-        let isTimerSneak = coordinator.sneakPeek.type == .timer && !vm.hideOnClosed && style == .standard
-        let isReminderSneak = coordinator.sneakPeek.type == .reminder && !vm.hideOnClosed && style == .standard
-        let isOtherSneak = coordinator.sneakPeek.type != .music && coordinator.sneakPeek.type != .timer && coordinator.sneakPeek.type != .reminder && vm.notchState == .closed
+        let isOtherSneak = coordinator.sneakPeek.type != .music && vm.notchState == .closed
         
-        return isMusicSneak || isTimerSneak || isReminderSneak || isOtherSneak
+        return isMusicSneak || isOtherSneak
     }
 
     private func resolvedSneakPeekStyle() -> SneakPeekStyle {
-        if case .extensionLiveActivity = coordinator.sneakPeek.type {
-            return .standard
-        }
         return coordinator.sneakPeek.styleOverride ?? Defaults[.sneakPeekStyles]
     }
 }
 
 private enum MusicSecondaryLiveActivity: Equatable {
-    case timer
-    case reminder(ReminderLiveActivityManager.ReminderEntry)
     case recording
     case focus(FocusModeType)
     case capsLock(showLabel: Bool)
-    case extensionPayload(ExtensionLiveActivityPayload)
     case shelf(count: Int)
 
     var id: String {
         switch self {
-        case .timer:
-            return "timer"
-        case .reminder(let entry):
-            return "reminder-\(entry.id)"
         case .recording:
             return "recording"
         case .focus(let mode):
             return "focus-\(mode.rawValue)"
         case .capsLock(let showLabel):
             return showLabel ? "caps-lock-label" : "caps-lock-icon"
-        case .extensionPayload(let payload):
-            return "extension-\(payload.id)"
         case .shelf(let count):
             return "shelf-\(count)"
         }
-    }
-}
-
-private struct MusicTimerSupplementView: View {
-    @ObservedObject var timerManager: TimerManager
-    let accentColor: Color
-    let showsCountdown: Bool
-    let showsProgress: Bool
-    let progressStyle: TimerProgressStyle
-    let notchHeight: CGFloat
-
-    private var clampedProgress: Double {
-        min(max(timerManager.progress, 0), 1)
-    }
-
-    private var showsRingProgress: Bool {
-        showsProgress && progressStyle == .ring
-    }
-
-    private var showsBarProgress: Bool {
-        showsProgress && progressStyle == .bar
-    }
-
-    private var countdownText: String {
-        timerManager.formattedRemainingTime()
-    }
-
-    private var countdownTextWidth: CGFloat {
-        max(1, TimerSupplementMetrics.countdownTextWidth(for: countdownText))
-    }
-
-    private var countdownFrameWidth: CGFloat {
-        TimerSupplementMetrics.countdownFrameWidth(for: countdownText)
-    }
-
-    private var timerNameFrameWidth: CGFloat {
-        TimerSupplementMetrics.timerNameFrameWidth(for: timerManager.timerName)
-    }
-
-    private var ringDiameter: CGFloat {
-        max(min(notchHeight - 4, 26), 20)
-    }
-
-    var body: some View {
-        HStack(spacing: showsRingProgress && showsCountdown ? 8 : 0) {
-            if showsRingProgress {
-                ringView
-            }
-
-            if showsCountdown {
-                countdownStack
-            } else if showsBarProgress {
-                standaloneBarView
-            } else {
-                timerNameView
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    private var countdownStack: some View {
-        VStack(alignment: .trailing, spacing: showsBarProgress ? 4 : 0) {
-            Text(countdownText)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundColor(timerManager.isOvertime ? .red : .white)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .contentTransition(.numericText())
-                .animation(.smooth(duration: 0.25), value: timerManager.remainingTime)
-                .frame(width: countdownFrameWidth, alignment: .trailing)
-
-            if showsBarProgress {
-                barView(width: countdownTextWidth)
-            }
-        }
-        .padding(.trailing, 2)
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    private var ringView: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.18), lineWidth: 3)
-            Circle()
-                .trim(from: 0, to: clampedProgress)
-                .stroke(accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.smooth(duration: 0.25), value: clampedProgress)
-        }
-        .frame(width: ringDiameter, height: ringDiameter)
-        .frame(width: max(ringDiameter + 4, 30), height: notchHeight, alignment: .center)
-    }
-
-    private var standaloneBarView: some View {
-        barView(width: 68)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    private var timerNameView: some View {
-        Text(timerManager.timerName)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white)
-            .lineLimit(1)
-            .frame(width: timerNameFrameWidth, alignment: .trailing)
-    }
-
-    private func barView(width: CGFloat) -> some View {
-        Capsule()
-            .fill(Color.white.opacity(0.15))
-            .frame(width: width, height: 4)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(accentColor)
-                    .frame(width: width * max(0, CGFloat(clampedProgress)), height: 4)
-                    .animation(.smooth(duration: 0.25), value: clampedProgress)
-            }
-    }
-
-}
-
-private struct MusicReminderSupplementView: View {
-    let entry: ReminderLiveActivityManager.ReminderEntry
-    let now: Date
-    let style: ReminderPresentationStyle
-    let accent: Color
-    let notchHeight: CGFloat
-
-    var body: some View {
-        Group {
-            switch style {
-            case .ringCountdown:
-                ringCountdownView
-            case .digital:
-                digitalCountdownView
-            case .minutes:
-                minutesCountdownView
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-    }
-
-    private var ringCountdownView: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.15), lineWidth: 3)
-            Circle()
-                .trim(from: 0, to: progressValue)
-                .stroke(accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.smooth(duration: 0.25), value: progressValue)
-        }
-        .frame(width: ringDiameter, height: ringDiameter)
-        .frame(width: max(ringDiameter + 4, 26), height: notchHeight, alignment: .center)
-    }
-
-    private var digitalCountdownView: some View {
-        Text(digitalCountdownText)
-            .font(.system(size: 15, weight: .semibold, design: .monospaced))
-            .foregroundColor(accent)
-            .contentTransition(.numericText())
-            .animation(.smooth(duration: 0.25), value: digitalCountdownText)
-            .frame(width: digitalFrameWidth, alignment: .trailing)
-            .frame(height: notchHeight, alignment: .center)
-    }
-
-    private var minutesCountdownView: some View {
-        Text(minutesCountdownText)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(accent)
-            .frame(width: minutesFrameWidth, alignment: .trailing)
-            .frame(height: notchHeight, alignment: .center)
-    }
-
-    private var progressValue: Double {
-        guard entry.leadTime > 0 else { return 1 }
-        let remaining = max(entry.event.start.timeIntervalSince(now), 0)
-        let elapsed = entry.leadTime - remaining
-        return min(max(elapsed / entry.leadTime, 0), 1)
-    }
-
-    private var digitalCountdownText: String {
-        ReminderSupplementMetrics.digitalCountdownText(for: entry, now: now)
-    }
-
-    private var minutesCountdownText: String {
-        ReminderSupplementMetrics.minutesCountdownText(for: entry, now: now)
-    }
-
-    private var ringDiameter: CGFloat {
-        ReminderSupplementMetrics.ringDiameter(for: notchHeight)
-    }
-
-    private var digitalFrameWidth: CGFloat {
-        ReminderSupplementMetrics.digitalFrameWidth(for: digitalCountdownText)
-    }
-
-    private var minutesFrameWidth: CGFloat {
-        ReminderSupplementMetrics.minutesFrameWidth(for: minutesCountdownText)
     }
 }
 
@@ -2903,54 +1780,6 @@ private typealias MusicSupplementFont = NSFont
 #elseif canImport(UIKit)
 private typealias MusicSupplementFont = UIFont
 #endif
-
-private enum TimerSupplementMetrics {
-    static func countdownTextWidth(for text: String) -> CGFloat {
-        // Measure with a fully monospaced font (matching the `.monospaced` design used
-        // to render) so hour-format times like 1:00:00 aren't under-measured and clipped.
-        musicMeasureText(text, font: MusicSupplementFont.monospacedSystemFont(ofSize: 13, weight: .semibold))
-    }
-
-    static func countdownFrameWidth(for text: String) -> CGFloat {
-        max(countdownTextWidth(for: text) + 16, 72)
-    }
-
-    static func timerNameFrameWidth(for text: String) -> CGFloat {
-        guard !text.isEmpty else { return 64 }
-        let width = musicMeasureText(text, font: MusicSupplementFont.systemFont(ofSize: 12, weight: .medium))
-        return max(width + 14, 64)
-    }
-}
-
-private enum ReminderSupplementMetrics {
-    static func digitalCountdownText(for entry: ReminderLiveActivityManager.ReminderEntry, now: Date) -> String {
-        let remaining = max(entry.event.start.timeIntervalSince(now), 0)
-        let totalSeconds = Int(remaining.rounded(.down))
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
-
-    static func minutesCountdownText(for entry: ReminderLiveActivityManager.ReminderEntry, now: Date) -> String {
-        let remaining = max(entry.event.start.timeIntervalSince(now), 0)
-        let minutes = max(1, Int(ceil(remaining / 60)))
-        return minutes == 1 ? "in 1 min" : "in \(minutes) min"
-    }
-
-    static func digitalFrameWidth(for text: String) -> CGFloat {
-        let width = musicMeasureText(text, font: MusicSupplementFont.monospacedDigitSystemFont(ofSize: 15, weight: .semibold))
-        return max(width + 18, 76)
-    }
-
-    static func minutesFrameWidth(for text: String) -> CGFloat {
-        let width = musicMeasureText(text, font: MusicSupplementFont.systemFont(ofSize: 13, weight: .semibold))
-        return max(width + 18, 88)
-    }
-
-    static func ringDiameter(for notchHeight: CGFloat) -> CGFloat {
-        max(min(notchHeight - 12, 22), 16)
-    }
-}
 
 private func musicMeasureText(_ text: String, font: MusicSupplementFont) -> CGFloat {
     guard !text.isEmpty else { return 0 }

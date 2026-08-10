@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Removed
+- Removed the following feature modules: clipboard history, notes and Apple Notes sync, color picker, AI (LLM usage monitoring and screen assistant), system stats monitoring, in-notch terminal, calendar and reminders (including the in-notch reminder live activity), lock screen weather / timer / reminder widgets, timer (including SystemTimerBridge and the lock screen timer widget), the third-party extension system (AtollExtensionKit), and Sparkle automatic updates.
+- Removed SwiftTerm, AtollExtensionKit, and Sparkle Swift Package dependencies, along with their associated build phases and CI steps.
+- Removed dead code: unused managers, views, and helpers that had zero references.
+- Removed the automatic update mechanism. Users must now download new versions manually. Older installed versions will report a failed update check (the appcast feed is gone) rather than failing silently.
+- Replaced the CI monotonic build-number allocator with a plain commit count; build numbers may decrease after history rewrites.
+
+> **Note on leftover data (not cleaned up by design):** The following user data from removed features remains on disk and can be deleted manually:
+> - `~/Documents/ClipboardData/`, `~/Documents/NoteImages/`, `~/Documents/ScreenAssistantAudio/`, `~/Documents/ScreenAssistantScreenshots/`
+> - Orphaned UserDefaults keys (clipboard history, color picker history, notes, screen assistant API keys, timer settings, etc.)
+> - Plain-text AI API keys previously stored in UserDefaults
+> - Keyboard shortcut registrations for removed features
+>
+> These orphan files do not affect app behavior.
 
 ## [2.3.3] - 2026-07-24
 

@@ -581,7 +581,6 @@ struct MusicControlsView: View {
             playbackButton(
                 icon: "backward.fill",
                 press: .nudge(-skipMagnitude),
-                trigger: skipGestureTrigger(for: .trackBackward)
             ) {
                 musicManager.previousTrack()
             }
@@ -589,7 +588,6 @@ struct MusicControlsView: View {
             playbackButton(
                 icon: "forward.fill",
                 press: .nudge(skipMagnitude),
-                trigger: skipGestureTrigger(for: .trackForward)
             ) {
                 musicManager.nextTrack()
             }
@@ -597,7 +595,6 @@ struct MusicControlsView: View {
             playbackButton(
                 icon: "gobackward.10",
                 press: .wiggle(.counterClockwise),
-                trigger: skipGestureTrigger(for: .seekBackward)
             ) {
                 musicManager.seek(by: -seekInterval)
             }
@@ -605,7 +602,6 @@ struct MusicControlsView: View {
             playbackButton(
                 icon: "goforward.10",
                 press: .wiggle(.clockwise),
-                trigger: skipGestureTrigger(for: .seekForward)
             ) {
                 musicManager.seek(by: seekInterval)
             }
@@ -640,44 +636,20 @@ struct MusicControlsView: View {
         }
     }
 
-    private struct SkipTrigger {
-        let token: Int
-        let pressEffect: HoverButton.PressEffect
-    }
-
     private func playbackButton(
         icon: String,
         press: HoverButton.PressEffect?,
-        trigger: SkipTrigger?,
         action: @escaping () -> Void
     ) -> some View {
         HoverButton(
             icon: icon,
             scale: .medium,
-            pressEffect: press,
-            externalTriggerToken: trigger?.token,
-            externalTriggerEffect: trigger?.pressEffect
+            pressEffect: press
         ) {
             action()
         }
     }
 
-    private func skipGestureTrigger(for control: MusicControlButton) -> SkipTrigger? {
-        guard let pulse = musicManager.skipGesturePulse else { return nil }
-
-        switch control {
-        case .trackBackward where pulse.behavior == .track && pulse.direction == .backward:
-            return SkipTrigger(token: pulse.token, pressEffect: .nudge(-skipMagnitude))
-        case .trackForward where pulse.behavior == .track && pulse.direction == .forward:
-            return SkipTrigger(token: pulse.token, pressEffect: .nudge(skipMagnitude))
-        case .seekBackward where pulse.behavior == .tenSecond && pulse.direction == .backward:
-            return SkipTrigger(token: pulse.token, pressEffect: .wiggle(.counterClockwise))
-        case .seekForward where pulse.behavior == .tenSecond && pulse.direction == .forward:
-            return SkipTrigger(token: pulse.token, pressEffect: .wiggle(.clockwise))
-        default:
-            return nil
-        }
-    }
 }
 
 // MARK: - Main View
@@ -687,7 +659,6 @@ struct NotchHomeView: View {
     @ObservedObject var webcamManager = WebcamManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
-    @ObservedObject private var extensionNotchExperienceManager = ExtensionNotchExperienceManager.shared
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.showStandardMediaControls) private var showStandardMediaControls
     @Default(.autoHideInactiveNotchMediaPlayer) private var autoHideInactiveNotchMediaPlayer
@@ -710,34 +681,12 @@ struct NotchHomeView: View {
     private var mainContent: some View {
         HStack(alignment: .top, spacing: 20) {
             if Defaults[.enableMinimalisticUI] {
-                if let overridePayload = minimalisticOverridePayload {
-                    ExtensionMinimalisticExperienceView(
-                        payload: overridePayload,
-                        albumArtNamespace: albumArtNamespace
-                    )
-                } else {
-                    MinimalisticMusicPlayerView(albumArtNamespace: albumArtNamespace)
-                }
+                MinimalisticMusicPlayerView(albumArtNamespace: albumArtNamespace)
             } else {
-                // Normal mode: Show full music player with optional calendar and webcam
+                // Normal mode: Show full music player with optional webcam
                 if shouldShowMusicPlayer {
                     MusicPlayerView(albumArtNamespace: albumArtNamespace)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                if Defaults[.showCalendar] {
-                    Group {
-                        if shouldShowMusicPlayer {
-                            CalendarView()
-                        } else {
-                            StandaloneCalendarView()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onHover { isHovering in
-                        vm.isHoveringCalendar = isHovering
-                    }
-                    .environmentObject(vm)
                 }
                 
                 if Defaults[.showMirror],
@@ -755,10 +704,6 @@ struct NotchHomeView: View {
             .combined(with: .move(edge: .top)))
         .blur(radius: vm.notchState == .closed ? 30 : 0)
         .padding(Defaults[.enableMinimalisticUI] ? 0 : 8) //Putting the main padding for home view here for consistency
-    }
-
-    private var minimalisticOverridePayload: ExtensionNotchExperiencePayload? {
-        extensionNotchExperienceManager.minimalisticReplacementPayload()
     }
 }
 

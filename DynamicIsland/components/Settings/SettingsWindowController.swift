@@ -22,11 +22,9 @@
 
 import AppKit
 import SwiftUI
-import Sparkle
 
 class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
-    private var updaterController: SPUStandardUpdaterController?
     
     private init() {
         let window = NSWindow(
@@ -43,12 +41,6 @@ class SettingsWindowController: NSWindowController {
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-    
-    func setUpdaterController(_ controller: SPUStandardUpdaterController) {
-        self.updaterController = controller
-        // Recreate the content view with the proper updater controller
-        setupWindow()
     }
     
     private func setupWindow() {
@@ -73,7 +65,7 @@ class SettingsWindowController: NSWindowController {
         window.identifier = NSUserInterfaceItemIdentifier("DynamicIslandSettingsWindow")
         
         // Create the SwiftUI content
-        let settingsView = SettingsView(updaterController: updaterController)
+        let settingsView = SettingsView()
         let hostingView = NSHostingView(rootView: settingsView)
         window.contentView = hostingView
         

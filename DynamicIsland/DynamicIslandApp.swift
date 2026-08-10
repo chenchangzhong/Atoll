@@ -20,7 +20,6 @@ import AVFoundation
 import Combine
 import Defaults
 import KeyboardShortcuts
-import Sparkle
 import SwiftUI
 import SkyLightWindow
 
@@ -30,29 +29,11 @@ struct DynamicNotchApp: App {
     @Default(.menubarIcon) var showMenuBarIcon
     @Environment(\.openWindow) var openWindow
 
-    let updaterController: SPUStandardUpdaterController
-    /// Retained delegate instance that dynamically selects the Sparkle feed URL
-    /// based on the user's update channel preference.
-    private let updaterDelegate = AtollUpdaterDelegate()
-
-    init() {
-        // Skip Sparkle's launch-time update check during UI testing.
-        // The AtollUpdaterDelegate overrides the feed URL at runtime
-        // based on the user's selected update channel.
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: !AppRuntimeEnvironment.isUITesting,
-            updaterDelegate: updaterDelegate, userDriverDelegate: nil)
-
-        // Initialize the settings window controller with the updater controller
-        SettingsWindowController.shared.setUpdaterController(updaterController)
-    }
-
     var body: some Scene {
         MenuBarExtra("dynamic.island", systemImage: "mountain.2.fill", isInserted: $showMenuBarIcon) {
             Button("Settings") {
                 SettingsWindowController.shared.showWindow()
             }
-            CheckForUpdatesView(updater: updaterController.updater)
             Divider()
             Button("Restart Atoll") {
                 guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
@@ -108,7 +89,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
     var whatsNewWindow: NSWindow?
     var timer: Timer?
-    let calendarManager = CalendarManager.shared
     let webcamManager = WebcamManager.shared
     let dndManager = DoNotDisturbManager.shared  // NEW: DND detection
     let bluetoothAudioManager = BluetoothAudioManager.shared  // NEW: Bluetooth audio detection
@@ -116,21 +96,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let downloadManager = DownloadManager.shared  // NEW: Chromium downloads detection
     let lockScreenPanelManager = LockScreenPanelManager.shared  // NEW: Lock screen music panel
     let mediaControlsStateCoordinator = MediaControlsStateCoordinator.shared
-    let systemTimerBridge = SystemTimerBridge.shared
-    let extensionXPCServiceHost = ExtensionXPCServiceHost.shared
-    let extensionRPCServer = ExtensionRPCServer.shared
     var closeNotchWorkItem: DispatchWorkItem?
     private var previousScreens: [NSScreen]?
     private var onboardingWindowController: NSWindowController?
     private var cancellables = Set<AnyCancellable>()
     private var windowsHiddenForLock = false
-    private var optionalShortcutHandlersRegistered = false
     private weak var focusWithoutDevToolsMenuItem: NSMenuItem?
     private weak var focusUseDevToolsMenuItem: NSMenuItem?
     
     // Debouncing mechanism for window size updates
     private var windowSizeUpdateWorkItem: DispatchWorkItem?
-//    let calendarManager = CalendarManager.shared
 //    let webcamManager = WebcamManager.shared
 //    var closeNotchWorkItem: DispatchWorkItem?
 //    private var previousScreens: [NSScreen]?
@@ -259,8 +234,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Cancel any pending window size updates
         windowSizeUpdateWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
-        extensionXPCServiceHost.stop()
-        extensionRPCServer.stop()
         
         // Stop AudioTap capture
         AudioTap.shared.stopCapture()
@@ -441,7 +414,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                       Defaults[.enableSneakPeek] &&
                                       (
                                           coordinator.expandingView.show &&
-                                          (coordinator.expandingView.type == .music || coordinator.expandingView.type == .timer) &&
+                                          (coordinator.expandingView.type == .music) &&
                                           Defaults[.sneakPeekStyles] == .inline ||
                                           airPodsListeningModeSneakActive
                                       )
@@ -495,24 +468,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         var baseSize = Defaults[.enableMinimalisticUI] ? minimalisticOpenNotchSize(isDynamicIslandMode: shouldUseDynamicIslandMode(for: vm.screen)) : openNotchSize
         
         // Use a consistent height for different view types
-        if coordinator.currentView == .timer {
-            baseSize.height = 250 // Extra space for timer presets
-        } else if coordinator.currentView == .notes || coordinator.currentView == .clipboard {
-            let preferredHeight = coordinator.notesLayoutState.preferredHeight
-            baseSize.height = max(baseSize.height, preferredHeight)
-        } else if coordinator.currentView == .terminal {
-            let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
-            let maxFraction = Defaults[.terminalMaxHeightFraction]
-            baseSize.height = min(screenHeight * maxFraction, max(300, screenHeight * maxFraction))
-        }
-        
-        let adjustedContentSize = statsAdjustedNotchSize(
-            from: baseSize,
-            isStatsTabActive: coordinator.currentView == .stats,
-            secondRowProgress: coordinator.statsSecondRowExpansion
-        )
         var result = addShadowPadding(
-            to: adjustedContentSize,
+            to: baseSize,
             isMinimalistic: Defaults[.enableMinimalisticUI]
         )
 
@@ -570,9 +527,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func shouldAnimateResize(for newSize: CGSize) -> Bool {
-        if Defaults[.enableMinimalisticUI] && !ReminderLiveActivityManager.shared.activeWindowReminders.isEmpty {
-            return false
-        }
         return true
     }
     
@@ -589,8 +543,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         LockScreenLiveActivityWindowManager.shared.configure(viewModel: vm)
         LockScreenManager.shared.configure(viewModel: vm)
-        extensionXPCServiceHost.start()
-        extensionRPCServer.start()
         
         // Migrate legacy progress bar settings
         Defaults.Keys.migrateProgressBarStyle()
@@ -678,99 +630,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }.store(in: &cancellables)
 
-        coordinator.$notesLayoutState
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.updateWindowSizeIfNeeded()
-            }
-            .store(in: &cancellables)
-        
-        // Observe stats settings changes - use debounced updates
-        Defaults.publisher(.enableStatsFeature, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-        
-        Defaults.publisher(.showCpuGraph, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-        
-        Defaults.publisher(.showMemoryGraph, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-        
-        Defaults.publisher(.showGpuGraph, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-        
-        Defaults.publisher(.showNetworkGraph, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-        
-        Defaults.publisher(.showDiskGraph, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-
+        // Observe openNotchWidth changes - use debounced updates
         Defaults.publisher(.openNotchWidth, options: []).sink { [weak self] _ in
             self?.debouncedUpdateWindowSize()
         }.store(in: &cancellables)
 
-        // Observe terminal settings changes
-        Defaults.publisher(.enableTerminalFeature, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
-        }.store(in: &cancellables)
-
-        Defaults.publisher(.terminalMaxHeightFraction, options: []).sink { [weak self] _ in
-            self?.debouncedUpdateWindowSize()
+        // Keep the shortcuts gate live so toggling "Enable keyboard shortcuts"
+        // in Settings takes effect mid-session instead of only at launch.
+        Defaults.publisher(.enableShortcuts, options: []).sink { change in
+            KeyboardShortcuts.isEnabled = change.newValue
         }.store(in: &cancellables)
 
         MemoryUsageMonitor.shared.startMonitoring()
-
-        ReminderLiveActivityManager.shared.$activeWindowReminders
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.debouncedUpdateWindowSize()
-            }
-            .store(in: &cancellables)
-
-        TimerManager.shared.$activeSource
-            .combineLatest(TimerManager.shared.$isTimerActive)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.debouncedUpdateWindowSize()
-            }
-            .store(in: &cancellables)
-
-        Defaults.publisher(.enableShortcuts, options: []).sink { [weak self] change in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                KeyboardShortcuts.isEnabled = change.newValue
-                self.updateFeatureShortcutAvailability()
-            }
-        }.store(in: &cancellables)
-
-        Defaults.publisher(.enableTimerFeature, options: []).sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateFeatureShortcutAvailability()
-            }
-        }.store(in: &cancellables)
-
-        Defaults.publisher(.enableClipboardManager, options: []).sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateFeatureShortcutAvailability()
-            }
-        }.store(in: &cancellables)
-
-        Defaults.publisher(.enableColorPickerFeature, options: []).sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateFeatureShortcutAvailability()
-            }
-        }.store(in: &cancellables)
-
-        Defaults.publisher(.enableScreenAssistant, options: []).sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateFeatureShortcutAvailability()
-            }
-        }.store(in: &cancellables)
 
         // Pin/unpin the notch above all spaces when the hide option changes:
         // "Never hide" joins the max-level CGSSpace, the hide options leave it.
@@ -909,8 +780,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         KeyboardShortcuts.isEnabled = Defaults[.enableShortcuts]
-        registerOptionalShortcutHandlers()
-        updateFeatureShortcutAvailability()
 
         if !Defaults[.showOnAllDisplays] {
             let viewModel = self.vm
@@ -927,24 +796,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 self.showOnboardingWindow()
             }
-            playWelcomeSound()
         }
         
         previousScreens = NSScreen.screens
-
-        // Skip weather under UI testing: prepareLocationAccess prompts for Location.
-        if Defaults[.enableLockScreenWeatherWidget] && !AppRuntimeEnvironment.isUITesting {
-            LockScreenWeatherManager.shared.prepareLocationAccess()
-            Task { @MainActor in
-                await LockScreenWeatherManager.shared.refresh(force: true)
-            }
-        }
-
-        // Warm up the lock screen timer widget manager so it can observe timer/default
-        // changes immediately instead of waiting for the first lock event.
-        let timerWidgetManager = LockScreenTimerWidgetManager.shared
-        timerWidgetManager.handleLockStateChange(isLocked: LockScreenManager.shared.currentLockStatus)
-
     }
 
     private func installTopMenuItemsIfNeeded() {
@@ -1214,125 +1068,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func registerOptionalShortcutHandlers() {
-        guard !optionalShortcutHandlersRegistered else { return }
-        optionalShortcutHandlersRegistered = true
-
-        KeyboardShortcuts.onKeyDown(for: .startDemoTimer) {
-            guard Defaults[.enableShortcuts], Defaults[.enableTimerFeature] else { return }
-            TimerManager.shared.startDemoTimer(duration: 300)
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .clipboardHistoryPanel) { [weak self] in
-            guard let self else { return }
-            guard Defaults[.enableShortcuts], Defaults[.enableClipboardManager] else { return }
-
-            if !ClipboardManager.shared.isMonitoring {
-                ClipboardManager.shared.startMonitoring()
-            }
-
-            switch Defaults[.clipboardDisplayMode] {
-            case .panel:
-                ClipboardPanelManager.shared.toggleClipboardPanel()
-            case .popover:
-                if vm.notchState == .closed {
-                    vm.open()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        NotificationCenter.default.post(name: NSNotification.Name("ToggleClipboardPopover"), object: nil)
-                    }
-                } else {
-                    NotificationCenter.default.post(name: NSNotification.Name("ToggleClipboardPopover"), object: nil)
-                }
-            case .separateTab:
-                if vm.notchState == .closed {
-                    vm.open()
-                    coordinator.currentView = .notes
-                } else {
-                    if coordinator.currentView == .notes {
-                        vm.close()
-                    } else {
-                        coordinator.currentView = .notes
-                    }
-                }
-            }
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .colorPickerPanel) {
-            guard Defaults[.enableShortcuts], Defaults[.enableColorPickerFeature] else { return }
-            ColorPickerPanelManager.shared.toggleColorPickerPanel()
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .toggleTerminalTab) { [weak self] in
-            guard let self else { return }
-            guard Defaults[.enableShortcuts], Defaults[.enableTerminalFeature] else { return }
-
-            if vm.notchState == .closed {
-                closeNotchWorkItem?.cancel()
-                closeNotchWorkItem = nil
-                vm.open()
-                coordinator.currentView = .terminal
-                TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-                TerminalManager.shared.focusTerminalIfPossible()
-                TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-            } else {
-                if coordinator.currentView == .terminal {
-                    coordinator.suppressHoverOpen()
-                    TerminalManager.shared.resignTerminalFirstResponderIfNeeded()
-                    vm.close()
-                } else {
-                    closeNotchWorkItem?.cancel()
-                    closeNotchWorkItem = nil
-                    coordinator.currentView = .terminal
-                    TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-                    TerminalManager.shared.focusTerminalIfPossible()
-                    TerminalManager.shared.refreshTerminalAppearanceIfNeeded()
-                }
-            }
-        }
-
-        KeyboardShortcuts.onKeyDown(for: .screenAssistantPanel) { [weak self] in
-            guard let self else { return }
-            guard Defaults[.enableShortcuts], Defaults[.enableScreenAssistant] else { return }
-
-            switch Defaults[.screenAssistantDisplayMode] {
-            case .panel:
-                ScreenAssistantPanelManager.shared.toggleScreenAssistantPanel()
-            case .popover:
-                if vm.notchState == .closed {
-                    vm.open()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        NotificationCenter.default.post(name: NSNotification.Name("ToggleScreenAssistantPopover"), object: nil)
-                    }
-                } else {
-                    NotificationCenter.default.post(name: NSNotification.Name("ToggleScreenAssistantPopover"), object: nil)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func updateFeatureShortcutAvailability() {
-        updateShortcut(.startDemoTimer, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableTimerFeature])
-        updateShortcut(.clipboardHistoryPanel, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableClipboardManager])
-        updateShortcut(.colorPickerPanel, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableColorPickerFeature])
-        updateShortcut(.screenAssistantPanel, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableScreenAssistant])
-        updateShortcut(.toggleTerminalTab, isEnabled: Defaults[.enableShortcuts] && Defaults[.enableTerminalFeature])
-    }
-
-    @MainActor
-    private func updateShortcut(_ name: KeyboardShortcuts.Name, isEnabled: Bool) {
-        if isEnabled {
-            KeyboardShortcuts.enable(name)
-        } else {
-            KeyboardShortcuts.disable(name)
-        }
-    }
-    
-    func playWelcomeSound() {
-        let audioPlayer = AudioPlayer()
-        audioPlayer.play(fileName: "dynamic", fileExtension: "m4a")
-    }
-    
     func deviceHasNotch() -> Bool {
         if #available(macOS 12.0, *) {
             for screen in NSScreen.screens {

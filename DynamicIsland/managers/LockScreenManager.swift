@@ -143,10 +143,7 @@ class LockScreenManager: ObservableObject {
         print("[\(timestamp())] LockScreenManager: 🎵 Showing lock screen panel")
         LockScreenPanelManager.shared.showPanel()
         LockScreenLiveActivityWindowManager.shared.showLocked()
-        LockScreenWeatherManager.shared.showWeatherWidget()
-        LockScreenTimerWidgetManager.shared.handleLockStateChange(isLocked: true)
-        TimerControlWindowManager.shared.hide(animated: false)
-        
+                    
         // THEN trigger lock icon in Atoll (only if enabled in settings)
         if Defaults[.enableLockScreenLiveActivity] {
             print("[\(timestamp())] LockScreenManager: 🔴 Starting lock icon live activity")
@@ -206,9 +203,7 @@ class LockScreenManager: ObservableObject {
         LockScreenPanelManager.shared.hidePanel()
         FullScreenArtworkWindowManager.shared.hide()
         LockScreenLiveActivityWindowManager.shared.showUnlockAndScheduleHide()
-        LockScreenWeatherManager.shared.hideWeatherWidget()
-        LockScreenTimerWidgetManager.shared.handleLockStateChange(isLocked: false)
-        
+                
         // Update state immediately
         if Defaults[.enableLockScreenLiveActivity] {
             collapseTask?.cancel()

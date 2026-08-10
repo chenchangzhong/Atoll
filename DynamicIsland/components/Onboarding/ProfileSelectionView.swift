@@ -35,15 +35,15 @@ struct ProfileSelectionView: View {
         UserProfile(
             id: "developer",
             name: String(localized: "Developer"),
-            icon: "terminal.fill",
-            description: String(localized: "Code and debug with color picker, stats monitoring, and screen assistant."),
+            icon: "hammer.fill",
+            description: String(localized: "Full notch experience with media controls, shelf, and system HUDs."),
             gradient: [Color.blue, Color.purple]
         ),
         UserProfile(
             id: "designer",
             name: String(localized: "Designer"),
             icon: "paintbrush.fill",
-            description: String(localized: "Create and design with color picker, mirror, and visual effects."),
+            description: String(localized: "Create and design with mirror, lighting effects, and visual polish."),
             gradient: [Color.pink, Color.orange]
         ),
         UserProfile(
@@ -57,7 +57,7 @@ struct ProfileSelectionView: View {
             id: "student",
             name: String(localized: "Student"),
             icon: "book.fill",
-            description: String(localized: "Stay organized with calendar, timer, and battery monitoring."),
+            description: String(localized: "Stay organized with battery monitoring."),
             gradient: [Color.indigo, Color.cyan]
         )
     ]
@@ -201,17 +201,9 @@ struct ProfileCard: View {
 // MARK: - Profile Settings Configuration
 
 func applyProfileSettings(_ profiles: Set<String>) {
-    // Clipboard is ALWAYS enabled (per user request)
-    Defaults[.enableClipboardManager] = true
-    
     // Developer Profile Settings
     let isDeveloper = profiles.contains("developer")
     if isDeveloper {
-        Defaults[.enableColorPickerFeature] = true
-        Defaults[.enableStatsFeature] = true
-        Defaults[.enableTerminalFeature] = true
-        Defaults[.enableTimerFeature] = true
-        Defaults[.enableScreenAssistant] = true
         Defaults[.showMirror] = false
         Defaults[.enableMinimalisticUI] = false
     }
@@ -219,39 +211,26 @@ func applyProfileSettings(_ profiles: Set<String>) {
     // Designer Profile Settings
     let isDesigner = profiles.contains("designer")
     if isDesigner {
-        Defaults[.enableColorPickerFeature] = true
         Defaults[.showMirror] = true
         Defaults[.lightingEffect] = true
         Defaults[.inlineHUD] = true
-        Defaults[.enableStatsFeature] = false
-        Defaults[.enableTimerFeature] = false
         Defaults[.enableMinimalisticUI] = false
-        Defaults[.enableScreenAssistant] = false
     }
     
     // Light Use Profile Settings
     let isLightUse = profiles.contains("lightuse")
     if isLightUse {
         Defaults[.enableMinimalisticUI] = true
-        Defaults[.enableColorPickerFeature] = false
         Defaults[.showMirror] = false
-        Defaults[.enableStatsFeature] = false
-        Defaults[.enableTimerFeature] = true
         Defaults[.inlineHUD] = true
-        Defaults[.enableScreenAssistant] = false
         Defaults[.enableLyrics] = false
     }
     
     // Student Profile Settings
     let isStudent = profiles.contains("student")
     if isStudent {
-        Defaults[.enableTimerFeature] = true
-        Defaults[.showCalendar] = true
-        Defaults[.enableColorPickerFeature] = false
         Defaults[.showMirror] = false
-        Defaults[.enableStatsFeature] = false
         Defaults[.enableMinimalisticUI] = false
-        Defaults[.enableScreenAssistant] = false
     }
     
     // If Light Use is NOT selected but others are, ensure minimalistic is OFF
@@ -266,8 +245,6 @@ func applyProfileSettings(_ profiles: Set<String>) {
     // Lyrics disabled by default for all profiles
     Defaults[.enableLyrics] = false
     
-    // Weather widget defaults to inline style
-    Defaults[.lockScreenWeatherWidgetStyle] = .inline
     
     // Auto-detect notch: Dynamic Island for non-notch Macs, standard notch otherwise
     if mainScreenHasNotch() {

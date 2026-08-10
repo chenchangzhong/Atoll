@@ -24,18 +24,8 @@ struct DynamicIslandHeader: View {
     @EnvironmentObject var webcamManager: WebcamManager
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
-    @ObservedObject var clipboardManager = ClipboardManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
-    @ObservedObject var timerManager = TimerManager.shared
     @ObservedObject var doNotDisturbManager = DoNotDisturbManager.shared
-    @State private var showClipboardPopover = false
-    @State private var showColorPickerPopover = false
-    @State private var showTimerPopover = false
-    @Default(.enableTimerFeature) var enableTimerFeature
-    @Default(.timerDisplayMode) var timerDisplayMode
-    @Default(.showClipboardIcon) var showClipboardIcon
-    @Default(.showColorPickerIcon) var showColorPickerIcon
-    @Default(.clipboardDisplayMode) var clipboardDisplayMode
     @Default(.showBatteryIndicator) var showBatteryIndicator
     @Default(.showBatteryPercentInside) var showBatteryPercentInside
     @Default(.showMinimalisticBatteryIndicator) var showMinimalisticBatteryIndicator
@@ -86,117 +76,6 @@ struct DynamicIslandHeader: View {
                                 }
                         }
                         .buttonStyle(PlainButtonStyle())
-                    }
-                    
-                    if Defaults[.enableClipboardManager]
-                        && showClipboardIcon
-                        && clipboardDisplayMode != .separateTab {
-                        Button(action: {
-                            // Switch behavior based on display mode
-                            switch clipboardDisplayMode {
-                            case .panel:
-                                ClipboardPanelManager.shared.toggleClipboardPanel()
-                            case .popover:
-                                showClipboardPopover.toggle()
-                            case .separateTab:
-                                coordinator.currentView = .notes
-                            }
-                        }) {
-                            Capsule()
-                                .fill(.black)
-                                .frame(width: 30, height: 30)
-                                .overlay {
-                                    Image(systemName: "doc.on.clipboard")
-                                        .foregroundColor(.white)
-                                        .padding()
-                                        .imageScale(.medium)
-                                }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .popover(isPresented: $showClipboardPopover, arrowEdge: .bottom) {
-                            ClipboardPopover()
-                        }
-                        .onChange(of: showClipboardPopover) { isActive in
-                            vm.isClipboardPopoverActive = isActive
-                            
-                            // If popover was closed, trigger a hover recheck
-                            if !isActive {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    vm.shouldRecheckHover.toggle()
-                                }
-                            }
-                        }
-                        .onAppear {
-                            if Defaults[.enableClipboardManager] && !clipboardManager.isMonitoring {
-                                clipboardManager.startMonitoring()
-                            }
-                        }
-                    }
-                    
-                    // ColorPicker button
-                    if Defaults[.enableColorPickerFeature] && showColorPickerIcon{
-                        Button(action: {
-                            switch Defaults[.colorPickerDisplayMode] {
-                            case .panel:
-                                ColorPickerPanelManager.shared.toggleColorPickerPanel()
-                            case .popover:
-                                showColorPickerPopover.toggle()
-                            }
-                        }) {
-                            Capsule()
-                                .fill(.black)
-                                .frame(width: 30, height: 30)
-                                .overlay {
-                                    Image(systemName: "eyedropper")
-                                        .foregroundColor(.white)
-                                        .padding()
-                                        .imageScale(.medium)
-                                }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .popover(isPresented: $showColorPickerPopover, arrowEdge: .bottom) {
-                            ColorPickerPopover()
-                        }
-                        .onChange(of: showColorPickerPopover) { isActive in
-                            vm.isColorPickerPopoverActive = isActive
-                            
-                            // If popover was closed, trigger a hover recheck
-                            if !isActive {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    vm.shouldRecheckHover.toggle()
-                                }
-                            }
-                        }
-                    }
-                    
-                    if Defaults[.enableTimerFeature] && timerDisplayMode == .popover {
-                        Button(action: {
-                            withAnimation(.smooth) {
-                                showTimerPopover.toggle()
-                            }
-                        }) {
-                            Capsule()
-                                .fill(.black)
-                                .frame(width: 30, height: 30)
-                                .overlay {
-                                    Image(systemName: "timer")
-                                        .foregroundColor(.white)
-                                        .padding()
-                                        .imageScale(.medium)
-                                }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .popover(isPresented: $showTimerPopover, arrowEdge: .bottom) {
-                            TimerPopover()
-                        }
-                        .onChange(of: showTimerPopover) { isActive in
-                            vm.isTimerPopoverActive = isActive
-                            if !isActive {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    vm.shouldRecheckHover.toggle()
-                                }
-                            }
-                        }
                     }
                     
                     if Defaults[.settingsIconInNotch] {
@@ -273,51 +152,12 @@ struct DynamicIslandHeader: View {
         }
         .foregroundColor(.gray)
         .environmentObject(vm)
-        .onChange(of: coordinator.shouldToggleClipboardPopover) { _ in
-            // Only toggle if clipboard is enabled
-            if Defaults[.enableClipboardManager] {
-                switch clipboardDisplayMode {
-                case .panel:
-                    ClipboardPanelManager.shared.toggleClipboardPanel()
-                case .popover:
-                    showClipboardPopover.toggle()
-                case .separateTab:
-                    if coordinator.currentView == .notes {
-                        coordinator.currentView = .home
-                    } else {
-                        coordinator.currentView = .notes
-                    }
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleClipboardPopover"))) { _ in
-            // Handle keyboard shortcut for popover mode
-            if Defaults[.enableClipboardManager] && clipboardDisplayMode == .popover {
-                showClipboardPopover.toggle()
-            }
-        }
-        .onChange(of: enableTimerFeature) { _, newValue in
-            if !newValue {
-                showTimerPopover = false
-                vm.isTimerPopoverActive = false
-            }
-        }
-        .onChange(of: timerDisplayMode) { _, mode in
-            if mode == .tab {
-                showTimerPopover = false
-                vm.isTimerPopoverActive = false
-            }
-        }
     }
 }
 
 private extension DynamicIslandHeader {
     var shouldSuppressStatusIndicators: Bool {
         Defaults[.settingsIconInNotch]
-            && Defaults[.enableClipboardManager]
-            && Defaults[.showClipboardIcon]
-            && Defaults[.showColorPickerIcon]
-            && Defaults[.enableTimerFeature]
     }
 }
 

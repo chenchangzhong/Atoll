@@ -150,7 +150,6 @@ class LockScreenPanelManager {
         publishPanelFrame(targetFrame)
         hideTask?.cancel()
         panelAnimator.isPresented = false
-        LockScreenTimerWidgetManager.shared.notifyMusicPanelFrameChanged(animated: false)
 
         let hosting = NSHostingView(rootView: LockScreenMusicPanel(animator: panelAnimator))
         hosting.frame = NSRect(origin: .zero, size: targetFrame.size)
@@ -206,7 +205,6 @@ class LockScreenPanelManager {
 
         publishPanelFrame(targetFrame)
 
-        LockScreenTimerWidgetManager.shared.notifyMusicPanelFrameChanged(animated: animated)
 
         // Update corner radius to match the SwiftUI panel's style
         let targetRadius = expanded ? expandedPanelCornerRadius : collapsedPanelCornerRadius
@@ -224,11 +222,6 @@ class LockScreenPanelManager {
         currentAdditionalHeight = additionalHeight
     }
 
-    func notifyTimerWidgetFrameChanged(animated: Bool) {
-        guard panelWindow?.isVisible == true || panelAnimator.isPresented else { return }
-        applyOffsetAdjustment(animated: animated)
-    }
-
     func applyOffsetAdjustment(animated: Bool = true) {
         guard let screen = currentScreen() else { return }
         let screenFrame = screen.frame
@@ -237,7 +230,6 @@ class LockScreenPanelManager {
 
         guard panelWindow != nil else { return }
         updatePanelSize(expanded: isPanelExpanded, additionalHeight: currentAdditionalHeight, animated: animated)
-        LockScreenTimerWidgetManager.shared.notifyMusicPanelFrameChanged(animated: animated)
     }
 
     func hidePanel() {
@@ -272,7 +264,6 @@ class LockScreenPanelManager {
         let screenFrame = screen.frame
         collapsedFrame = collapsedFrame(for: screenFrame)
         updatePanelSize(expanded: isPanelExpanded, additionalHeight: currentAdditionalHeight, animated: false)
-        LockScreenTimerWidgetManager.shared.notifyMusicPanelFrameChanged(animated: false)
 
         print("[\(timestamp())] LockScreenPanelManager: realigned window due to \(reason)")
     }
@@ -329,21 +320,9 @@ class LockScreenPanelManager {
         let baseCenterY = screenFrame.midY
         let largestHalfHeight = max(artworkSide, panelSize.height) / 2
         let minCenterY = screenFrame.minY + largestHalfHeight + 56
-        var maxCenterY = screenFrame.maxY - largestHalfHeight - 84
+        let maxCenterY = screenFrame.maxY - largestHalfHeight - 84
 
-        let widgetClearance: CGFloat = 20
-        if let weatherFrame = LockScreenWeatherPanelManager.shared.latestFrame,
-           !weatherFrame.isEmpty {
-            let weatherTopConstrainedCenterY = weatherFrame.minY - widgetClearance - largestHalfHeight
-            maxCenterY = min(maxCenterY, weatherTopConstrainedCenterY)
-        }
-        if let timerFrame = LockScreenTimerWidgetPanelManager.shared.latestFrame,
-           !timerFrame.isEmpty {
-            let timerTopConstrainedCenterY = timerFrame.minY - widgetClearance - largestHalfHeight
-            maxCenterY = min(maxCenterY, timerTopConstrainedCenterY)
-        }
-
-        let resolvedMaxCenterY = max(maxCenterY, minCenterY)
+                let resolvedMaxCenterY = max(maxCenterY, minCenterY)
         let centerY = min(max(baseCenterY, minCenterY), resolvedMaxCenterY)
 
         return NSRect(
@@ -361,13 +340,7 @@ class LockScreenPanelManager {
         let defaultLowering: CGFloat = -28
         let userOffset = CGFloat(Defaults[.lockScreenMusicVerticalOffset])
         let clampedOffset = min(max(userOffset, -160), 160)
-        var originY = baseOriginY + defaultLowering + clampedOffset
-
-        if let timerFrame = LockScreenTimerWidgetPanelManager.shared.latestFrame {
-            let maxAllowedTop = timerFrame.minY - 12
-            let maxOriginY = maxAllowedTop - collapsedSize.height
-            originY = min(originY, maxOriginY)
-        }
+        let originY = baseOriginY + defaultLowering + clampedOffset
 
         return NSRect(x: originX, y: originY, width: collapsedSize.width, height: collapsedSize.height)
     }

@@ -16,32 +16,38 @@ class PrivacyConfigurationTests(unittest.TestCase):
 
         self.assertTrue(entitlements.get("com.apple.security.device.camera"))
 
-    def test_notes_sync_is_authorized_for_apple_events(self):
-        project = PROJECT.read_text()
+    def test_notes_automation_removed_from_apple_events(self):
         entitlements = plistlib.loads(ENTITLEMENTS.read_bytes())
 
-        self.assertNotIn("AUTOMATION_APPLE_EVENTS = NO;", project)
-        self.assertIn(
+        self.assertNotIn(
             "com.apple.Notes",
             entitlements["com.apple.security.temporary-exception.apple-events"],
         )
 
-    def test_automation_usage_text_names_notes(self):
+    def test_automation_usage_text_names_spotify_and_music(self):
         project = PROJECT.read_text()
 
         self.assertEqual(
             2,
             project.count(
-                'INFOPLIST_KEY_NSAppleEventsUsageDescription = "Atoll uses AppleScripts to control Spotify, Apple Music, and Notes.";'
+                'INFOPLIST_KEY_NSAppleEventsUsageDescription = "Atoll uses AppleScripts to control Spotify and Apple Music.";'
             ),
         )
 
-    def test_full_access_reminder_api_has_matching_usage_text(self):
+    def test_reminders_and_calendar_permissions_removed(self):
         project = PROJECT.read_text()
 
         self.assertEqual(
-            2,
+            0,
             project.count("INFOPLIST_KEY_NSRemindersFullAccessUsageDescription ="),
+        )
+        self.assertEqual(
+            0,
+            project.count("ENABLE_RESOURCE_ACCESS_CALENDARS = YES;"),
+        )
+        self.assertEqual(
+            0,
+            project.count("INFOPLIST_KEY_NSLocationWhenInUseUsageDescription ="),
         )
 
     def test_release_resigning_preserves_archived_entitlements(self):

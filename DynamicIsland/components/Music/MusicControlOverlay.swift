@@ -26,7 +26,7 @@ struct MusicControlOverlay: View {
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.musicSkipBehavior) private var musicSkipBehavior
 
-    private let seekInterval: TimeInterval = MusicManager.skipGestureSeekInterval
+    private let seekInterval: TimeInterval = 10
     private let skipPressMagnitude: CGFloat = 8
 
     private var trackBackwardPressEffect: FloatingMediaButton.PressEffect { .nudge(-skipPressMagnitude) }
@@ -107,9 +107,6 @@ struct MusicControlOverlay: View {
     var body: some View {
         let verticalPadding = max(8, notchHeight * 0.12)
 
-        let backwardGestureTrigger = skipGestureTrigger(for: .backward)
-        let forwardGestureTrigger = skipGestureTrigger(for: .forward)
-
         HStack(spacing: 18) {
             FloatingMediaButton(
                 icon: backwardConfig.icon,
@@ -118,8 +115,8 @@ struct MusicControlOverlay: View {
                 foregroundColor: .white.opacity(controlsEnabled ? 0.9 : 0.35),
                 pressEffect: backwardConfig.pressEffect,
                 symbolEffectStyle: backwardConfig.symbolEffect,
-                externalTriggerToken: backwardGestureTrigger?.token,
-                externalTriggerEffect: backwardGestureTrigger?.pressEffect,
+                externalTriggerToken: nil,
+                externalTriggerEffect: nil,
                 isEnabled: controlsEnabled,
                 action: backwardConfig.action
             )
@@ -144,8 +141,8 @@ struct MusicControlOverlay: View {
                 foregroundColor: .white.opacity(controlsEnabled ? 0.9 : 0.35),
                 pressEffect: forwardConfig.pressEffect,
                 symbolEffectStyle: forwardConfig.symbolEffect,
-                externalTriggerToken: forwardGestureTrigger?.token,
-                externalTriggerEffect: forwardGestureTrigger?.pressEffect,
+                externalTriggerToken: nil,
+                externalTriggerEffect: nil,
                 isEnabled: controlsEnabled,
                 action: forwardConfig.action
             )
@@ -309,28 +306,6 @@ private struct FloatingMediaButton: View {
     enum WiggleDirection {
         case clockwise
         case counterClockwise
-    }
-}
-
-private extension MusicControlOverlay {
-    func skipGestureTrigger(for direction: MusicManager.SkipDirection) -> (token: Int, pressEffect: FloatingMediaButton.PressEffect)? {
-        guard let pulse = musicManager.skipGesturePulse, pulse.direction == direction else {
-            return nil
-        }
-
-        let effect: FloatingMediaButton.PressEffect
-        switch (pulse.behavior, direction) {
-        case (.track, .backward):
-            effect = trackBackwardPressEffect
-        case (.track, .forward):
-            effect = trackForwardPressEffect
-        case (.tenSecond, .backward):
-            effect = tenSecondBackwardPressEffect
-        case (.tenSecond, .forward):
-            effect = tenSecondForwardPressEffect
-        }
-
-        return (token: pulse.token, pressEffect: effect)
     }
 }
 

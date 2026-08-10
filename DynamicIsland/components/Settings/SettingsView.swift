@@ -8,11 +8,9 @@ import AppKit
 import AVFoundation
 import Combine
 import Defaults
-import EventKit
 import KeyboardShortcuts
 import LaunchAtLogin
 import LottieUI
-import Sparkle
 import SwiftUI
 import SwiftUIIntrospect
 import UniformTypeIdentifiers
@@ -22,10 +20,7 @@ private enum SettingsTabGroup: String, CaseIterable, Identifiable {
     case core
     case mediaAndDisplay
     case system
-    case productivity
     case utilities
-    case developer
-    case integrations
     case info
 
     var id: String { rawValue }
@@ -36,10 +31,7 @@ private enum SettingsTabGroup: String, CaseIterable, Identifiable {
         case .core:             return nil
         case .mediaAndDisplay:  return String(localized: "Media & Display")
         case .system:           return String(localized: "System")
-        case .productivity:     return String(localized: "Productivity")
         case .utilities:        return String(localized: "Utilities")
-        case .developer:        return String(localized: "Developer")
-        case .integrations:     return String(localized: "Integrations")
         case .info:             return nil
         }
     }
@@ -52,20 +44,11 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case lockScreen
     case media
     case devices
-    case extensions
-    case timer
-    case calendar
     case hudAndOSD
     case battery
-    case stats
-    case clipboard
-    case screenAssistant
-    case colorPicker
     case downloads
     case shelf
     case shortcuts
-    case notes
-    case terminal
     case about
 
     var id: String { rawValue }
@@ -76,11 +59,8 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .general, .appearance:                                          return .core
         case .media, .liveActivities, .lockScreen, .devices:                 return .mediaAndDisplay
         case .hudAndOSD, .battery:                                           return .system
-        case .timer, .calendar, .notes:                                      return .productivity
-        case .clipboard, .screenAssistant, .colorPicker, .shelf,
+        case .shelf,
              .downloads, .shortcuts:                                         return .utilities
-        case .stats, .terminal:                                              return .developer
-        case .extensions:                                                    return .integrations
         case .about:                                                         return .info
         }
     }
@@ -93,20 +73,11 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .lockScreen: return String(localized: "Lock Screen")
         case .media: return String(localized: "Media")
         case .devices: return String(localized: "Devices")
-        case .extensions: return String(localized: "Extensions")
-        case .timer: return String(localized: "Timer")
-        case .calendar: return String(localized: "Calendar")
         case .hudAndOSD: return String(localized: "Controls")
         case .battery: return String(localized: "Battery")
-        case .stats: return String(localized: "Stats")
-        case .clipboard: return String(localized: "Clipboard")
-        case .screenAssistant: return String(localized: "Screen Assistant")
-        case .colorPicker: return String(localized: "Color Picker")
         case .downloads: return String(localized: "Downloads")
         case .shelf: return String(localized: "Shelf")
         case .shortcuts: return String(localized: "Shortcuts")
-        case .notes: return String(localized: "Notes")
-        case .terminal: return String(localized: "Terminal")
         case .about: return String(localized: "About")
         }
     }
@@ -119,20 +90,11 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .lockScreen: return "lock.laptopcomputer"
         case .media: return "play.laptopcomputer"
         case .devices: return "headphones"
-        case .extensions: return "puzzlepiece.extension"
-        case .timer: return "timer"
-        case .calendar: return "calendar"
         case .hudAndOSD: return "dial.medium.fill"
         case .battery: return "battery.100.bolt"
-        case .stats: return "chart.xyaxis.line"
-        case .clipboard: return "clipboard"
-        case .screenAssistant: return "brain.head.profile"
-        case .colorPicker: return "eyedropper"
         case .downloads: return "square.and.arrow.down"
         case .shelf: return "books.vertical"
         case .shortcuts: return "keyboard"
-        case .notes: return "note.text"
-        case .terminal: return "apple.terminal"
         case .about: return "info.circle"
         }
     }
@@ -145,20 +107,11 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .lockScreen: return .orange
         case .media: return .green
         case .devices: return Color(red: 0.1, green: 0.11, blue: 0.12)
-        case .extensions: return Color(red: 0.557, green: 0.353, blue: 0.957)
-        case .timer: return .red
-        case .calendar: return .cyan
         case .hudAndOSD: return .indigo
         case .battery: return Color(red: 0.202, green: 0.783, blue: 0.348, opacity: 1.000)
-        case .stats: return .teal
-        case .clipboard: return .mint
-        case .screenAssistant: return .pink
-        case .colorPicker: return .accentColor
         case .downloads: return .gray
         case .shelf: return .brown
         case .shortcuts: return .orange
-        case .notes: return Color(red: 0.979, green: 0.716, blue: 0.153, opacity: 1.000)
-        case .terminal: return Color(red: 0.2, green: 0.8, blue: 0.4)
         case .about: return .secondary
         }
     }
@@ -297,12 +250,6 @@ struct SettingsView: View {
     @State private var searchText: String = ""
     @StateObject private var highlightCoordinator = SettingsHighlightCoordinator()
     @Default(.enableMinimalisticUI) var enableMinimalisticUI
-
-    let updaterController: SPUStandardUpdaterController?
-
-    init(updaterController: SPUStandardUpdaterController? = nil) {
-        self.updaterController = updaterController
-    }
 
     var body: some View {
         NavigationSplitView {
@@ -462,17 +409,6 @@ struct SettingsView: View {
                         Capsule()
                             .fill(Color.blue)
                     )
-            } else if tab == .extensions {
-                Spacer()
-                Text("BETA")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(Color.blue)
-                    )
             }
         }
         .padding(.vertical, 4)
@@ -494,21 +430,11 @@ struct SettingsView: View {
             .hudAndOSD,
             .battery,
             // Productivity
-            .timer,
-            .calendar,
-            .notes,
             // Utilities
-            .clipboard,
-            .screenAssistant,
-            .colorPicker,
             .shelf,
             .downloads,
             .shortcuts,
             // Developer
-            .stats,
-            .terminal,
-            // Integrations
-            .extensions,
             // Info
             .about
         ]
@@ -703,10 +629,6 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .general, title: "Show on a specific display", keywords: ["preferred screen", "display picker"], highlightID: SettingsTab.general.highlightID(for: "Show on a specific display")),
             SettingsSearchEntry(tab: .general, title: "Automatically switch displays", keywords: ["auto switch", "displays"], highlightID: SettingsTab.general.highlightID(for: "Automatically switch displays")),
             SettingsSearchEntry(tab: .general, title: "Hide Dynamic Island during screenshots & recordings", keywords: ["privacy", "screenshot", "recording"], highlightID: SettingsTab.general.highlightID(for: "Hide Dynamic Island during screenshots & recordings")),
-            SettingsSearchEntry(tab: .general, title: "Enable gestures", keywords: ["gestures", "trackpad"], highlightID: SettingsTab.general.highlightID(for: "Enable gestures")),
-            SettingsSearchEntry(tab: .general, title: "Close gesture", keywords: ["pinch", "swipe"], highlightID: SettingsTab.general.highlightID(for: "Close gesture")),
-            SettingsSearchEntry(tab: .general, title: "Reverse swipe gestures", keywords: ["reverse", "swipe", "media"], highlightID: SettingsTab.general.highlightID(for: "Reverse swipe gestures")),
-            SettingsSearchEntry(tab: .general, title: "Reverse scroll gestures", keywords: ["reverse", "scroll", "open", "close"], highlightID: SettingsTab.general.highlightID(for: "Reverse scroll gestures")),
             SettingsSearchEntry(tab: .general, title: "Extend hover area", keywords: ["hover", "cursor"], highlightID: SettingsTab.general.highlightID(for: "Extend hover area")),
             SettingsSearchEntry(tab: .general, title: "Enable haptics", keywords: ["haptic", "feedback"], highlightID: SettingsTab.general.highlightID(for: "Enable haptics")),
             SettingsSearchEntry(tab: .general, title: "Open notch on hover", keywords: ["hover to open", "auto open"], highlightID: SettingsTab.general.highlightID(for: "Open notch on hover")),
@@ -723,7 +645,6 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .liveActivities, title: "Enable Camera Detection", keywords: ["camera", "privacy indicator"], highlightID: SettingsTab.liveActivities.highlightID(for: "Enable Camera Detection")),
             SettingsSearchEntry(tab: .liveActivities, title: "Enable Microphone Detection", keywords: ["microphone", "privacy"], highlightID: SettingsTab.liveActivities.highlightID(for: "Enable Microphone Detection")),
             SettingsSearchEntry(tab: .liveActivities, title: "Enable music live activity", keywords: ["music", "now playing"], highlightID: SettingsTab.liveActivities.highlightID(for: "Enable music live activity")),
-            SettingsSearchEntry(tab: .liveActivities, title: "Enable reminder live activity", keywords: ["reminder", "live activity"], highlightID: SettingsTab.liveActivities.highlightID(for: "Enable reminder live activity")),
 
             // Battery (Charge)
             SettingsSearchEntry(tab: .battery, title: "Show battery indicator", keywords: ["battery hud", "charge"], highlightID: SettingsTab.battery.highlightID(for: "Show battery indicator")),
@@ -786,25 +707,6 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .media, title: "Enable album art parallax", keywords: ["parallax", "lock screen", "album art"], highlightID: SettingsTab.media.highlightID(for: "Enable album art parallax")),
             SettingsSearchEntry(tab: .media, title: "Enable album art parallax effect", keywords: ["parallax", "parallax effect", "album art"], highlightID: SettingsTab.media.highlightID(for: "Enable album art parallax effect")),
 
-            // Calendar
-            SettingsSearchEntry(tab: .calendar, title: "Show calendar", keywords: ["calendar", "events"], highlightID: SettingsTab.calendar.highlightID(for: "Show calendar")),
-            SettingsSearchEntry(tab: .calendar, title: "Enable reminder live activity", keywords: ["reminder", "live activity"], highlightID: SettingsTab.calendar.highlightID(for: "Enable reminder live activity")),
-            SettingsSearchEntry(tab: .calendar, title: "Countdown style", keywords: ["reminder countdown"], highlightID: SettingsTab.calendar.highlightID(for: "Countdown style")),
-            SettingsSearchEntry(tab: .calendar, title: "Show lock screen reminder", keywords: ["lock screen", "reminder widget"], highlightID: SettingsTab.calendar.highlightID(for: "Show lock screen reminder")),
-            SettingsSearchEntry(tab: .calendar, title: "Show next calendar event", keywords: ["calendar widget", "lock screen", "next event"], highlightID: SettingsTab.calendar.highlightID(for: "Show next calendar event")),
-            SettingsSearchEntry(tab: .calendar, title: "Show events within the next", keywords: ["calendar widget", "lookahead"], highlightID: SettingsTab.calendar.highlightID(for: "Show events within the next")),
-            SettingsSearchEntry(tab: .calendar, title: "Show events from all calendars", keywords: ["calendar widget", "selection"], highlightID: SettingsTab.calendar.highlightID(for: "Show events from all calendars")),
-            SettingsSearchEntry(tab: .calendar, title: "Show countdown", keywords: ["calendar widget", "countdown"], highlightID: SettingsTab.calendar.highlightID(for: "Show countdown")),
-            SettingsSearchEntry(tab: .calendar, title: "Show event for entire duration", keywords: ["calendar widget", "duration"], highlightID: SettingsTab.calendar.highlightID(for: "Show event for entire duration")),
-            SettingsSearchEntry(tab: .calendar, title: "Hide active event and show next upcoming event", keywords: ["calendar widget", "after start"], highlightID: SettingsTab.calendar.highlightID(for: "Hide active event and show next upcoming event")),
-            SettingsSearchEntry(tab: .calendar, title: "Show time remaining", keywords: ["calendar widget", "remaining"], highlightID: SettingsTab.calendar.highlightID(for: "Show time remaining")),
-            SettingsSearchEntry(tab: .calendar, title: "Show start time after event begins", keywords: ["calendar widget", "start time"], highlightID: SettingsTab.calendar.highlightID(for: "Show start time after event begins")),
-            SettingsSearchEntry(tab: .calendar, title: "Chip color", keywords: ["reminder chip", "color"], highlightID: SettingsTab.calendar.highlightID(for: "Chip color")),
-            SettingsSearchEntry(tab: .calendar, title: "Hide all-day events", keywords: ["calendar", "all-day"], highlightID: SettingsTab.calendar.highlightID(for: "Hide all-day events")),
-            SettingsSearchEntry(tab: .calendar, title: "Hide completed reminders", keywords: ["reminder", "completed"], highlightID: SettingsTab.calendar.highlightID(for: "Hide completed reminders")),
-            SettingsSearchEntry(tab: .calendar, title: "Show full event titles", keywords: ["calendar", "titles"], highlightID: SettingsTab.calendar.highlightID(for: "Show full event titles")),
-            SettingsSearchEntry(tab: .calendar, title: "Auto-scroll to next event", keywords: ["calendar", "scroll"], highlightID: SettingsTab.calendar.highlightID(for: "Auto-scroll to next event")),
-
             // Shelf
             SettingsSearchEntry(tab: .shelf, title: "Enable shelf", keywords: ["shelf", "dock"], highlightID: SettingsTab.shelf.highlightID(for: "Enable shelf")),
             SettingsSearchEntry(tab: .shelf, title: "Open shelf tab by default if items added", keywords: ["auto open", "shelf tab"], highlightID: SettingsTab.shelf.highlightID(for: "Open shelf tab by default if items added")),
@@ -830,7 +732,6 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .appearance, title: "App icon", keywords: ["app icon", "custom icon"], highlightID: SettingsTab.appearance.highlightID(for: "App icon")),
 
             // Lock Screen
-            SettingsSearchEntry(tab: .lockScreen, title: "Preview lock screen widgets", keywords: ["preview", "lock screen", "widgets"], highlightID: SettingsTab.lockScreen.highlightID(for: "Preview lock screen widgets")),
             SettingsSearchEntry(tab: .lockScreen, title: "Enable lock screen live activity", keywords: ["lock screen", "live activity"], highlightID: SettingsTab.lockScreen.highlightID(for: "Enable lock screen live activity")),
             SettingsSearchEntry(tab: .lockScreen, title: "Play lock/unlock sounds", keywords: ["chime", "sound"], highlightID: SettingsTab.lockScreen.highlightID(for: "Play lock/unlock sounds")),
             SettingsSearchEntry(tab: .lockScreen, title: "Material", keywords: ["glass", "frosted", "liquid"], highlightID: SettingsTab.lockScreen.highlightID(for: "Material")),
@@ -838,103 +739,16 @@ struct SettingsView: View {
             SettingsSearchEntry(tab: .lockScreen, title: "Show media app icon", keywords: ["app icon", "media"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show media app icon")),
             SettingsSearchEntry(tab: .lockScreen, title: "Show panel border", keywords: ["panel border"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show panel border")),
             SettingsSearchEntry(tab: .lockScreen, title: "Enable media panel blur", keywords: ["blur", "media panel"], highlightID: SettingsTab.lockScreen.highlightID(for: "Enable media panel blur")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show lock screen timer", keywords: ["timer widget", "lock screen timer"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show lock screen timer")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Timer surface", keywords: ["timer glass", "classic", "blur"], highlightID: SettingsTab.lockScreen.highlightID(for: "Timer surface")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Timer glass material", keywords: ["frosted", "liquid", "timer material"], highlightID: SettingsTab.lockScreen.highlightID(for: "Timer glass material")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Timer liquid mode", keywords: ["timer", "standard", "custom"], highlightID: SettingsTab.lockScreen.highlightID(for: "Timer liquid mode")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Timer widget variant", keywords: ["timer variant", "liquid"], highlightID: SettingsTab.lockScreen.highlightID(for: "Timer widget variant")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show lock screen weather", keywords: ["weather widget"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show lock screen weather")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Layout", keywords: ["inline", "circular", "weather layout"], highlightID: SettingsTab.lockScreen.highlightID(for: "Layout")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Weather data provider", keywords: ["wttr", "open meteo"], highlightID: SettingsTab.lockScreen.highlightID(for: "Weather data provider")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Temperature unit", keywords: ["celsius", "fahrenheit"], highlightID: SettingsTab.lockScreen.highlightID(for: "Temperature unit")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show location label", keywords: ["location", "weather"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show location label")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show charging status", keywords: ["charging", "weather"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show charging status")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show charging percentage", keywords: ["charging percentage"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show charging percentage")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show battery indicator", keywords: ["battery gauge", "weather"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show battery indicator")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Use MacBook icon when on battery", keywords: ["laptop icon", "battery"], highlightID: SettingsTab.lockScreen.highlightID(for: "Use MacBook icon when on battery")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show Bluetooth battery", keywords: ["bluetooth", "gauge"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show Bluetooth battery")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show AQI widget", keywords: ["air quality", "aqi"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show AQI widget")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Air quality scale", keywords: ["aqi", "scale"], highlightID: SettingsTab.lockScreen.highlightID(for: "Air quality scale")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Use colored gauges", keywords: ["gauge tint", "monochrome"], highlightID: SettingsTab.lockScreen.highlightID(for: "Use colored gauges")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Show lock screen reminder", keywords: ["lock screen", "reminder widget"], highlightID: SettingsTab.lockScreen.highlightID(for: "Show lock screen reminder")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Chip color", keywords: ["reminder chip", "color"], highlightID: SettingsTab.lockScreen.highlightID(for: "Chip color")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Reminder alignment", keywords: ["reminder", "alignment", "position"], highlightID: SettingsTab.lockScreen.highlightID(for: "Reminder alignment")),
-            SettingsSearchEntry(tab: .lockScreen, title: "Reminder vertical offset", keywords: ["reminder", "offset", "position"], highlightID: SettingsTab.lockScreen.highlightID(for: "Reminder vertical offset")),
-
-            // Extensions
-            SettingsSearchEntry(tab: .extensions, title: "Enable third-party extensions", keywords: ["extensions", "authorization", "third party"], highlightID: SettingsTab.extensions.highlightID(for: "Enable third-party extensions")),
-            SettingsSearchEntry(tab: .extensions, title: "Allow extension live activities", keywords: ["extensions", "live activities", "permissions"], highlightID: SettingsTab.extensions.highlightID(for: "Allow extension live activities")),
-            SettingsSearchEntry(tab: .extensions, title: "Allow extension lock screen widgets", keywords: ["extensions", "lock screen", "widgets"], highlightID: SettingsTab.extensions.highlightID(for: "Allow extension lock screen widgets")),
-            SettingsSearchEntry(tab: .extensions, title: "Enable extension diagnostics logging", keywords: ["extensions", "diagnostics", "logging"], highlightID: SettingsTab.extensions.highlightID(for: "Enable extension diagnostics logging")),
-            SettingsSearchEntry(tab: .extensions, title: "Manage app permissions", keywords: ["extensions", "permissions", "apps"], highlightID: SettingsTab.extensions.highlightID(for: "App permissions list")),
 
             // Shortcuts
             SettingsSearchEntry(tab: .shortcuts, title: "Enable global keyboard shortcuts", keywords: ["keyboard", "shortcut"], highlightID: SettingsTab.shortcuts.highlightID(for: "Enable global keyboard shortcuts")),
 
-            // Timer
-            SettingsSearchEntry(tab: .timer, title: "Enable timer feature", keywords: ["timer", "enable"], highlightID: SettingsTab.timer.highlightID(for: "Enable timer feature")),
-            SettingsSearchEntry(tab: .timer, title: "Mirror macOS Clock timers", keywords: ["system timer", "clock app"], highlightID: SettingsTab.timer.highlightID(for: "Mirror macOS Clock timers")),
-            SettingsSearchEntry(tab: .timer, title: "Show lock screen timer widget", keywords: ["lock screen", "timer widget"], highlightID: SettingsTab.timer.highlightID(for: "Show lock screen timer widget")),
-            SettingsSearchEntry(tab: .timer, title: "Timer surface", keywords: ["timer glass", "classic", "blur"], highlightID: SettingsTab.timer.highlightID(for: "Timer surface")),
-            SettingsSearchEntry(tab: .timer, title: "Timer glass material", keywords: ["frosted", "liquid", "timer material"], highlightID: SettingsTab.timer.highlightID(for: "Timer glass material")),
-            SettingsSearchEntry(tab: .timer, title: "Timer liquid mode", keywords: ["timer", "standard", "custom"], highlightID: SettingsTab.timer.highlightID(for: "Timer liquid mode")),
-            SettingsSearchEntry(tab: .timer, title: "Timer widget variant", keywords: ["timer variant", "liquid"], highlightID: SettingsTab.timer.highlightID(for: "Timer widget variant")),
-            SettingsSearchEntry(tab: .timer, title: "Timer tint", keywords: ["timer colour", "preset"], highlightID: SettingsTab.timer.highlightID(for: "Timer tint")),
-            SettingsSearchEntry(tab: .timer, title: "Solid colour", keywords: ["timer colour", "custom"], highlightID: SettingsTab.timer.highlightID(for: "Solid colour")),
-            SettingsSearchEntry(tab: .timer, title: "Progress style", keywords: ["progress", "bar", "ring"], highlightID: SettingsTab.timer.highlightID(for: "Progress style")),
-            SettingsSearchEntry(tab: .timer, title: "Accent colour", keywords: ["accent", "timer"], highlightID: SettingsTab.timer.highlightID(for: "Accent colour")),
-
-            // Stats
-            SettingsSearchEntry(tab: .stats, title: "Enable system stats monitoring", keywords: ["stats", "monitoring"], highlightID: SettingsTab.stats.highlightID(for: "Enable system stats monitoring")),
-            SettingsSearchEntry(tab: .stats, title: "Enable LLM Usage Monitor", keywords: ["llm", "usage", "ai", "monitor"], highlightID: SettingsTab.stats.highlightID(for: "Enable LLM Usage Monitor")),
-            SettingsSearchEntry(tab: .stats, title: "Claude Provider", keywords: ["llm", "claude", "provider", "toggle"], highlightID: SettingsTab.stats.highlightID(for: "Claude Provider")),
-            SettingsSearchEntry(tab: .stats, title: "Codex Provider", keywords: ["llm", "codex", "provider", "toggle"], highlightID: SettingsTab.stats.highlightID(for: "Codex Provider")),
-            SettingsSearchEntry(tab: .stats, title: "Cursor Provider", keywords: ["llm", "cursor", "provider", "toggle"], highlightID: SettingsTab.stats.highlightID(for: "Cursor Provider")),
-            SettingsSearchEntry(tab: .stats, title: "Stop monitoring after closing the notch", keywords: ["stats", "auto stop"], highlightID: SettingsTab.stats.highlightID(for: "Stop monitoring after closing the notch")),
-            SettingsSearchEntry(tab: .stats, title: "CPU Usage", keywords: ["cpu", "graph"], highlightID: SettingsTab.stats.highlightID(for: "CPU Usage")),
-            SettingsSearchEntry(tab: .stats, title: "Temperature unit", keywords: ["cpu", "temperature", "celsius", "fahrenheit"], highlightID: SettingsTab.stats.highlightID(for: "Temperature unit")),
-            SettingsSearchEntry(tab: .stats, title: "Memory Usage", keywords: ["memory", "ram"], highlightID: SettingsTab.stats.highlightID(for: "Memory Usage")),
-            SettingsSearchEntry(tab: .stats, title: "GPU Usage", keywords: ["gpu", "graphics"], highlightID: SettingsTab.stats.highlightID(for: "GPU Usage")),
-            SettingsSearchEntry(tab: .stats, title: "Network Activity", keywords: ["network", "graph"], highlightID: SettingsTab.stats.highlightID(for: "Network Activity")),
-            SettingsSearchEntry(tab: .stats, title: "Disk I/O", keywords: ["disk", "io"], highlightID: SettingsTab.stats.highlightID(for: "Disk I/O")),
-
-            // Clipboard
-            SettingsSearchEntry(tab: .clipboard, title: "Enable Clipboard Manager", keywords: ["clipboard", "manager"], highlightID: SettingsTab.clipboard.highlightID(for: "Enable Clipboard Manager")),
-            SettingsSearchEntry(tab: .clipboard, title: "Show Clipboard Icon", keywords: ["icon", "clipboard"], highlightID: SettingsTab.clipboard.highlightID(for: "Show Clipboard Icon")),
-            SettingsSearchEntry(tab: .clipboard, title: "Display Mode", keywords: ["list", "grid", "clipboard"], highlightID: SettingsTab.clipboard.highlightID(for: "Display Mode")),
-            SettingsSearchEntry(tab: .clipboard, title: "History Size", keywords: ["history", "clipboard"], highlightID: SettingsTab.clipboard.highlightID(for: "History Size")),
-
-            // Screen Assistant
-            SettingsSearchEntry(tab: .screenAssistant, title: "Enable Screen Assistant", keywords: ["screen assistant", "ai"], highlightID: SettingsTab.screenAssistant.highlightID(for: "Enable Screen Assistant")),
-            SettingsSearchEntry(tab: .screenAssistant, title: "Display Mode", keywords: ["screen assistant", "mode"], highlightID: SettingsTab.screenAssistant.highlightID(for: "Display Mode")),
-
-            // Color Picker
-            SettingsSearchEntry(tab: .colorPicker, title: "Enable Color Picker", keywords: ["color picker", "eyedropper"], highlightID: SettingsTab.colorPicker.highlightID(for: "Enable Color Picker")),
-            SettingsSearchEntry(tab: .colorPicker, title: "Show Color Picker Icon", keywords: ["color icon", "toolbar"], highlightID: SettingsTab.colorPicker.highlightID(for: "Show Color Picker Icon")),
-            SettingsSearchEntry(tab: .colorPicker, title: "Display Mode", keywords: ["color", "list"], highlightID: SettingsTab.colorPicker.highlightID(for: "Display Mode")),
-            SettingsSearchEntry(tab: .colorPicker, title: "History Size", keywords: ["color history"], highlightID: SettingsTab.colorPicker.highlightID(for: "History Size")),
-            SettingsSearchEntry(tab: .colorPicker, title: "Show All Color Formats", keywords: ["hex", "hsl", "color formats"], highlightID: SettingsTab.colorPicker.highlightID(for: "Show All Color Formats")),
-
-            // Terminal
-            SettingsSearchEntry(tab: .terminal, title: "Enable terminal", keywords: ["terminal", "guake", "shell"], highlightID: SettingsTab.terminal.highlightID(for: "Enable terminal")),
-            SettingsSearchEntry(tab: .terminal, title: "Shell path", keywords: ["shell", "zsh", "bash", "terminal"], highlightID: SettingsTab.terminal.highlightID(for: "Shell path")),
-            SettingsSearchEntry(tab: .terminal, title: "Font size", keywords: ["terminal", "font", "text size"], highlightID: SettingsTab.terminal.highlightID(for: "Font size")),
-            SettingsSearchEntry(tab: .terminal, title: "Terminal opacity", keywords: ["terminal", "opacity", "transparency", "blur", "background"], highlightID: SettingsTab.terminal.highlightID(for: "Terminal opacity")),
-            SettingsSearchEntry(tab: .terminal, title: "Maximum height", keywords: ["terminal", "height", "size"], highlightID: SettingsTab.terminal.highlightID(for: "Maximum height")),
-            SettingsSearchEntry(tab: .terminal, title: "Background color", keywords: ["terminal", "background", "color", "theme"], highlightID: SettingsTab.terminal.highlightID(for: "Background color")),
-            SettingsSearchEntry(tab: .terminal, title: "Foreground color", keywords: ["terminal", "foreground", "text color", "theme"], highlightID: SettingsTab.terminal.highlightID(for: "Foreground color")),
-            SettingsSearchEntry(tab: .terminal, title: "Cursor color", keywords: ["terminal", "cursor", "caret", "color"], highlightID: SettingsTab.terminal.highlightID(for: "Cursor color")),
-            SettingsSearchEntry(tab: .terminal, title: "Bold as bright", keywords: ["terminal", "bold", "bright", "colors"], highlightID: SettingsTab.terminal.highlightID(for: "Bold as bright")),
-            SettingsSearchEntry(tab: .terminal, title: "Cursor style", keywords: ["terminal", "cursor", "block", "underline", "bar", "blink"], highlightID: SettingsTab.terminal.highlightID(for: "Cursor style")),
-            SettingsSearchEntry(tab: .terminal, title: "Scrollback lines", keywords: ["terminal", "scrollback", "buffer", "history"], highlightID: SettingsTab.terminal.highlightID(for: "Scrollback lines")),
-            SettingsSearchEntry(tab: .terminal, title: "Option as Meta", keywords: ["terminal", "option", "meta", "alt", "key"], highlightID: SettingsTab.terminal.highlightID(for: "Option as Meta")),
-            SettingsSearchEntry(tab: .terminal, title: "Mouse reporting", keywords: ["terminal", "mouse", "reporting", "vim", "tmux"], highlightID: SettingsTab.terminal.highlightID(for: "Mouse reporting")),
         ]
     }
 
     private func isTabVisible(_ tab: SettingsTab) -> Bool {
         switch tab {
-        case .timer, .stats, .clipboard, .screenAssistant, .colorPicker, .shelf, .notes, .terminal:
+        case .shelf:
             return !enableMinimalisticUI
         default:
             return true
@@ -968,18 +782,6 @@ struct SettingsView: View {
             SettingsForm(tab: .devices) {
                 DevicesSettingsView()
             }
-        case .extensions:
-            SettingsForm(tab: .extensions) {
-                ExtensionsSettingsView()
-            }
-        case .timer:
-            SettingsForm(tab: .timer) {
-                TimerSettings()
-            }
-        case .calendar:
-            SettingsForm(tab: .calendar) {
-                CalendarSettings()
-            }
         case .hudAndOSD:
             SettingsForm(tab: .hudAndOSD) {
                 HUDAndOSDSettingsView()
@@ -987,22 +789,6 @@ struct SettingsView: View {
         case .battery:
             SettingsForm(tab: .battery) {
                 Charge()
-            }
-        case .stats:
-            SettingsForm(tab: .stats) {
-                StatsSettings()
-            }
-        case .clipboard:
-            SettingsForm(tab: .clipboard) {
-                ClipboardSettings()
-            }
-        case .screenAssistant:
-            SettingsForm(tab: .screenAssistant) {
-                ScreenAssistantSettings()
-            }
-        case .colorPicker:
-            SettingsForm(tab: .colorPicker) {
-                ColorPickerSettings()
             }
         case .downloads:
             SettingsForm(tab: .downloads) {
@@ -1016,23 +802,9 @@ struct SettingsView: View {
             SettingsForm(tab: .shortcuts) {
                 Shortcuts()
             }
-        case .notes:
-            SettingsForm(tab: .notes) {
-                NotesSettingsView()
-            }
-        case .terminal:
-            SettingsForm(tab: .terminal) {
-                TerminalSettings()
-            }
         case .about:
-            if let controller = updaterController {
-                SettingsForm(tab: .about) {
-                    About(updaterController: controller)
-                }
-            } else {
-                SettingsForm(tab: .about) {
-                    About(updaterController: SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil))
-                }
+            SettingsForm(tab: .about) {
+                About()
             }
         }
     }
@@ -1044,7 +816,6 @@ struct GeneralSettings: View {
     @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
     @Default(.mirrorShape) var mirrorShape
     @Default(.showEmojis) var showEmojis
-    @Default(.gestureSensitivity) var gestureSensitivity
     @Default(.minimumHoverDuration) var minimumHoverDuration
     @Default(.nonNotchHeight) var nonNotchHeight
     @Default(.nonNotchHeightMode) var nonNotchHeightMode
@@ -1054,14 +825,9 @@ struct GeneralSettings: View {
     @Default(.notchHeightMode) var notchHeightMode
     @Default(.showOnAllDisplays) var showOnAllDisplays
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
-    @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
     @Default(.enableMinimalisticUI) var enableMinimalisticUI
     @Default(.showMinimalisticBatteryIndicator) var showMinimalisticBatteryIndicator
-    @Default(.enableHorizontalMusicGestures) var enableHorizontalMusicGestures
-    @Default(.musicGestureBehavior) var musicGestureBehavior
-    @Default(.reverseSwipeGestures) var reverseSwipeGestures
-    @Default(.reverseScrollGestures) var reverseScrollGestures
     @Default(.externalDisplayStyle) var externalDisplayStyle
     @Default(.hideNonNotchUntilHover) var hideNonNotchUntilHover
 
@@ -1205,7 +971,6 @@ struct GeneralSettings: View {
 
             NotchBehaviour()
 
-            gestureControls()
         }
         .toolbar {
             Button("Quit app") {
@@ -1214,77 +979,8 @@ struct GeneralSettings: View {
             .controlSize(.extraLarge)
         }
         .navigationTitle("General")
-        .onChange(of: openNotchOnHover) {
-            if !openNotchOnHover {
-                enableGestures = true
-            }
-        }
     }
 
-    @ViewBuilder
-    func gestureControls() -> some View {
-        Section {
-            Defaults.Toggle(key: .enableGestures) {
-                Text("Enable gestures")
-            }
-            .disabled(!openNotchOnHover)
-            .settingsHighlight(id: highlightID("Enable gestures"))
-            if enableGestures {
-                Defaults.Toggle(key: .enableHorizontalMusicGestures) {
-                    Text("Media change with horizontal gestures")
-                }
-                .settingsHighlight(id: highlightID("Horizontal media gestures"))
-
-                if enableHorizontalMusicGestures {
-                    Picker("Gesture skip behavior", selection: $musicGestureBehavior) {
-                        ForEach(MusicSkipBehavior.allCases) { behavior in
-                            Text(behavior.displayName)
-                                .tag(behavior)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .settingsHighlight(id: highlightID("Gesture skip behavior"))
-
-                    Text(musicGestureBehavior.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Defaults.Toggle(key: .reverseSwipeGestures) {
-                        Text("Reverse swipe gestures")
-                    }
-                    .settingsHighlight(id: highlightID("Reverse swipe gestures"))
-                }
-
-                Defaults.Toggle(key: .closeGestureEnabled) {
-                    Text("Close gesture")
-                }
-                .settingsHighlight(id: highlightID("Close gesture"))
-                Slider(value: $gestureSensitivity, in: 100...300, step: 100) {
-                    HStack {
-                        Text("Gesture sensitivity")
-                        Spacer()
-                        Text(Defaults[.gestureSensitivity] == 100 ? "High" : Defaults[.gestureSensitivity] == 200 ? "Medium" : "Low")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Defaults.Toggle(key: .reverseScrollGestures) {
-                    Text("Reverse open/close scroll gestures")
-                }
-                .settingsHighlight(id: highlightID("Reverse scroll gestures"))
-            }
-        } header: {
-            HStack {
-                Text("Gesture control")
-                customBadge(text: "Beta")
-            }
-        } footer: {
-            Text("Two-finger swipe up on notch to close, two-finger swipe down on notch to open when **Open notch on hover** option is disabled")
-                .multilineTextAlignment(.trailing)
-                .foregroundStyle(.secondary)
-                .font(.caption)
-        }
-    }
 
     @ViewBuilder
     func NotchBehaviour() -> some View {
@@ -3115,452 +2811,10 @@ struct Media: View {
     }
 }
 
-struct CalendarSettings: View {
-    @ObservedObject private var calendarManager = CalendarManager.shared
-    @Default(.showCalendar) var showCalendar: Bool
-    @Default(.enableReminderLiveActivity) var enableReminderLiveActivity
-    @Default(.reminderPresentationStyle) var reminderPresentationStyle
-    @Default(.reminderLeadTime) var reminderLeadTime
-    @Default(.reminderSneakPeekDuration) var reminderSneakPeekDuration
-    @Default(.enableLockScreenReminderWidget) var enableLockScreenReminderWidget
-    @Default(.lockScreenReminderChipStyle) var lockScreenReminderChipStyle
-    @Default(.hideAllDayEvents) var hideAllDayEvents
-    @Default(.hideCompletedReminders) var hideCompletedReminders
-    @Default(.showFullEventTitles) var showFullEventTitles
-    @Default(.autoScrollToNextEvent) var autoScrollToNextEvent
-    @Default(.lockScreenShowCalendarCountdown) private var lockScreenShowCalendarCountdown
-    @Default(.lockScreenShowCalendarEvent) private var lockScreenShowCalendarEvent
-    @Default(.lockScreenShowCalendarEventEntireDuration) private var lockScreenShowCalendarEventEntireDuration
-    @Default(.lockScreenShowCalendarEventAfterStartWindow) private var lockScreenShowCalendarEventAfterStartWindow
-    @Default(.lockScreenShowCalendarTimeRemaining) private var lockScreenShowCalendarTimeRemaining
-    @Default(.lockScreenShowCalendarStartTimeAfterBegins) private var lockScreenShowCalendarStartTimeAfterBegins
-    @Default(.lockScreenCalendarEventLookaheadWindow) private var lockScreenCalendarEventLookaheadWindow
-    @Default(.lockScreenCalendarSelectionMode) private var lockScreenCalendarSelectionMode
-    @Default(.lockScreenSelectedCalendarIDs) private var lockScreenSelectedCalendarIDs
-    @Default(.lockScreenShowCalendarEventAfterStartEnabled) private var lockScreenShowCalendarEventAfterStartEnabled
-    @Default(.enableThirdPartyCalendarApp) private var enableThirdPartyCalendarApp
-    @Default(.selectedCalendarApp) private var selectedCalendarApp
-    @Default(.fantasticalDefaultView) private var fantasticalDefaultView
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.calendar.highlightID(for: title)
-    }
-
-    private enum CalendarLookaheadOption: String, CaseIterable, Identifiable {
-        case mins15 = "15m"
-        case mins30 = "30m"
-        case hour1 = "1h"
-        case hours3 = "3h"
-        case hours6 = "6h"
-        case hours12 = "12h"
-        case restOfDay = "rest_of_day"
-        case allTime = "all_time"
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .mins15: return "15 mins"
-            case .mins30: return "30 mins"
-            case .hour1: return "1 hour"
-            case .hours3: return "3 hours"
-            case .hours6: return "6 hours"
-            case .hours12: return "12 hours"
-            case .restOfDay: return "Rest of the day"
-            case .allTime: return "All time"
-            }
-        }
-    }
-
-    var body: some View {
-        Form {
-            if !calendarManager.hasCalendarAccess || !calendarManager.hasReminderAccess {
-                Text("Calendar or Reminder access is denied. Please enable it in System Settings.")
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding()
-
-                HStack {
-                    Button("Request Access") {
-                        Task {
-                            await calendarManager.checkCalendarAuthorization()
-                            await calendarManager.checkReminderAuthorization()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("Open System Settings") {
-                        if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                            NSWorkspace.shared.open(settingsURL)
-                        }
-                    }
-                }
-            } else {
-                // Permissions status
-                Section(header: Text("Permissions")) {
-                    HStack {
-                        Text("Calendars")
-                        Spacer()
-                        Text(statusText(for: calendarManager.calendarAuthorizationStatus))
-                            .foregroundColor(color(for: calendarManager.calendarAuthorizationStatus))
-                    }
-                    HStack {
-                        Text("Reminders")
-                        Spacer()
-                        Text(statusText(for: calendarManager.reminderAuthorizationStatus))
-                            .foregroundColor(color(for: calendarManager.reminderAuthorizationStatus))
-                    }
-                }
-
-                Defaults.Toggle(key: .showCalendar) {
-                    Text("Show calendar")
-                }
-                .settingsHighlight(id: highlightID("Show calendar"))
-
-                Section(header: Text("Event List")) {
-                    Toggle("Hide completed reminders", isOn: $hideCompletedReminders)
-                        .settingsHighlight(id: highlightID("Hide completed reminders"))
-                    Toggle("Show full event titles", isOn: $showFullEventTitles)
-                        .settingsHighlight(id: highlightID("Show full event titles"))
-                    Toggle("Auto-scroll to next event", isOn: $autoScrollToNextEvent)
-                        .settingsHighlight(id: highlightID("Auto-scroll to next event"))
-                }
-
-                Section(header: Text("All-Day Events")) {
-                    Toggle("Hide all-day events", isOn: $hideAllDayEvents)
-                        .settingsHighlight(id: highlightID("Hide all-day events"))
-                        .disabled(!showCalendar)
-
-                    Text("Turn this off to include all-day entries in the notch calendar and reminder live activity.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section(header: Text("Reminder Live Activity")) {
-                    Defaults.Toggle(key: .enableReminderLiveActivity) {
-                        Text("Enable reminder live activity")
-                    }
-                    .settingsHighlight(id: highlightID("Enable reminder live activity"))
-
-                    Picker("Countdown style", selection: $reminderPresentationStyle) {
-                        ForEach(ReminderPresentationStyle.allCases) { style in
-                            Text(style.displayName).tag(style)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .disabled(!enableReminderLiveActivity)
-                    .settingsHighlight(id: highlightID("Countdown style"))
-
-                    HStack {
-                        Text("Notify before")
-                        Slider(
-                            value: Binding(
-                                get: { Double(reminderLeadTime) },
-                                set: { reminderLeadTime = Int($0) }
-                            ),
-                            in: 1...60,
-                            step: 1
-                        )
-                        .disabled(!enableReminderLiveActivity)
-                        Text("\(reminderLeadTime) min")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 60, alignment: .trailing)
-                    }
-
-                    HStack {
-                        Text("Sneak peek duration")
-                        Slider(
-                            value: $reminderSneakPeekDuration,
-                            in: 3...20,
-                            step: 1
-                        )
-                        .disabled(!enableReminderLiveActivity)
-                        Text("\(Int(reminderSneakPeekDuration)) s")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 60, alignment: .trailing)
-                    }
-                }
-
-                Section(header: Text("Lock Screen Reminder Widget")) {
-                    Defaults.Toggle(key: .enableLockScreenReminderWidget) {
-                        Text("Show lock screen reminder")
-                    }
-                    .settingsHighlight(id: highlightID("Show lock screen reminder"))
-
-                    Picker("Chip color", selection: $lockScreenReminderChipStyle) {
-                        ForEach(LockScreenReminderChipStyle.allCases) { style in
-                            Text(style.localizedName).tag(style)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .disabled(!enableLockScreenReminderWidget || !enableReminderLiveActivity)
-                    .settingsHighlight(id: highlightID("Chip color"))
-                }
-
-                Section(
-                    header: Text("Calendar Widget"),
-                    footer: Text("Displays your next upcoming calendar event above or below the weather capsule. Calendar selection here is independent from the Dynamic Island calendar filter.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                ) {
-                    Defaults.Toggle(key: .lockScreenShowCalendarEvent) {
-                        Text("Show next calendar event")
-                    }
-                    .settingsHighlight(id: highlightID("Show next calendar event"))
-
-                    LabeledContent("Show events within the next") {
-                        HStack {
-                            Spacer(minLength: 0)
-                            Picker("", selection: $lockScreenCalendarEventLookaheadWindow) {
-                                ForEach(CalendarLookaheadOption.allCases) { option in
-                                    Text(option.title).tag(option.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                    .disabled(!lockScreenShowCalendarEvent)
-                    .settingsHighlight(id: highlightID("Show events within the next"))
-
-                    Toggle("Show events from all calendars", isOn: Binding(
-                        get: { lockScreenCalendarSelectionMode == "all" },
-                        set: { useAll in
-                            if useAll {
-                                lockScreenCalendarSelectionMode = "all"
-                            } else {
-                                lockScreenCalendarSelectionMode = "selected"
-                                lockScreenSelectedCalendarIDs = Set(calendarManager.eventCalendars.map { $0.id })
-                            }
-                        }
-                    ))
-                    .disabled(!lockScreenShowCalendarEvent)
-                    .settingsHighlight(id: highlightID("Show events from all calendars"))
-
-                    if lockScreenCalendarSelectionMode != "all" {
-                        HStack {
-                            Spacer()
-                            Button("Deselect All") {
-                                lockScreenSelectedCalendarIDs = []
-                            }
-                            .buttonStyle(.link)
-                        }
-                        .padding(.top, 2)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(calendarManager.eventCalendars, id: \.id) { calendar in
-                                Toggle(isOn: Binding(
-                                    get: { lockScreenSelectedCalendarIDs.contains(calendar.id) },
-                                    set: { isOn in
-                                        if isOn {
-                                            lockScreenSelectedCalendarIDs.insert(calendar.id)
-                                        } else {
-                                            lockScreenSelectedCalendarIDs.remove(calendar.id)
-                                        }
-                                    }
-                                )) {
-                                    HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(Color(calendar.color))
-                                            .frame(width: 8, height: 8)
-                                        Text(calendar.title)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.top, 4)
-                        .padding(.leading, 2)
-                        .disabled(!lockScreenShowCalendarEvent)
-                    }
-
-                    Defaults.Toggle(key: .lockScreenShowCalendarCountdown) {
-                        Text("Show countdown")
-                    }
-                    .disabled(!lockScreenShowCalendarEvent)
-                    .settingsHighlight(id: highlightID("Show countdown"))
-
-                    Defaults.Toggle(key: .lockScreenShowCalendarEventEntireDuration) {
-                        Text("Show event for entire duration")
-                    }
-                    .disabled(!lockScreenShowCalendarEvent)
-                    .settingsHighlight(id: highlightID("Show event for entire duration"))
-                    .onChange(of: Defaults[.lockScreenShowCalendarEventEntireDuration]) { _, newValue in
-                        if newValue {
-                            Defaults[.lockScreenShowCalendarEventAfterStartEnabled] = false
-                        }
-                    }
-
-                    Defaults.Toggle(key: .lockScreenShowCalendarEventAfterStartEnabled) {
-                        Text("Hide active event and show next upcoming event")
-                    }
-                    .disabled(!lockScreenShowCalendarEvent || lockScreenShowCalendarEventEntireDuration)
-                    .settingsHighlight(id: highlightID("Hide active event and show next upcoming event"))
-
-                    LabeledContent("Show event after it starts") {
-                        HStack {
-                            Spacer(minLength: 0)
-                            Picker("", selection: $lockScreenShowCalendarEventAfterStartWindow) {
-                                Text("1 min").tag("1m")
-                                Text("5 mins").tag("5m")
-                                Text("10 mins").tag("10m")
-                                Text("15 mins").tag("15m")
-                                Text("30 mins").tag("30m")
-                                Text("45 mins").tag("45m")
-                                Text("1 hour").tag("1h")
-                                Text("2 hours").tag("2h")
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                    .disabled(!lockScreenShowCalendarEvent || lockScreenShowCalendarEventEntireDuration || !lockScreenShowCalendarEventAfterStartEnabled)
-
-                    Text("Turn off 'Show event for entire duration' to use the post-start duration option.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Defaults.Toggle(key: .lockScreenShowCalendarTimeRemaining) {
-                        Text("Show time remaining")
-                    }
-                    .disabled(!lockScreenShowCalendarEvent)
-                    .settingsHighlight(id: highlightID("Show time remaining"))
-
-                    Defaults.Toggle(key: .lockScreenShowCalendarStartTimeAfterBegins) {
-                        Text("Show start time after event begins")
-                    }
-                    .disabled(!lockScreenShowCalendarEvent)
-                    .settingsHighlight(id: highlightID("Show start time after event begins"))
-                }
-                
-                // MARK: - Third-party Calendar Integration
-                Section {
-                    Defaults.Toggle(key: .enableThirdPartyCalendarApp) {
-                        HStack {
-                            Image(systemName: "ellipsis.calendar")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20, height: 20)
-                            Text("Enable third-party calendar app launch")
-                        }
-                    }
-                    .settingsHighlight(id: highlightID("Enable third-party calendar app launch"))
-                    
-                    if enableThirdPartyCalendarApp {
-                        Picker("Calendar App", selection: $selectedCalendarApp) {
-                            ForEach(ThirdPartyCalendarApp.allCases) { app in
-                                HStack {
-                                    AppIconImage(
-                                        bundleIdentifiers: app.bundleIdentifiers,
-                                        symbolFallback: app.fallbackIconName,
-                                        symbolColor: app.fallbackIconColor
-                                    )
-                                    Text(app.displayName)
-                                }
-                                .tag(app)
-                            }
-                        }
-                        .settingsHighlight(id: highlightID("Calendar App"))
-                        
-                        if selectedCalendarApp == .fantastical {
-                            Picker("Default View", selection: $fantasticalDefaultView) {
-                                ForEach(FantasticalViewStyle.allCases, id: \.self) { style in
-                                    Text(style.displayName).tag(style)
-                                }
-                            }
-                            .settingsHighlight(id: highlightID("Fantastical Default View"))
-                        }
-                    }
-                } header: {
-                    Text("Third-party Calendar Integration")
-                } footer: {
-                    Text("When enabled, clicking on calendar events will open the selected third-party calendar app instead of Apple Calendar.")
-                }
-
-                Section(header: Text("Select Calendars")) {
-                    let grouped = Dictionary(grouping: calendarManager.allCalendars, by: \.accountName)
-                    let sortedAccounts = grouped.keys.sorted()
-
-                    ForEach(sortedAccounts, id: \.self) { account in
-                        let accountCalendars = grouped[account] ?? []
-                        let allAccountSelected = accountCalendars.allSatisfy { calendarManager.getCalendarSelected($0) }
-
-                        Section(header: HStack {
-                            Text(account)
-                            Spacer()
-                            Toggle("", isOn: Binding(
-                                get: { allAccountSelected },
-                                set: { isSelected in
-                                    Task {
-                                        await calendarManager.setCalendarsSelected(accountCalendars, isSelected: isSelected)
-                                    }
-                                }
-                            ))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.mini)
-                            .disabled(!showCalendar)
-                        }) {
-                            ForEach(accountCalendars, id: \.id) { calendar in
-                                Toggle(isOn: Binding(
-                                    get: { calendarManager.getCalendarSelected(calendar) },
-                                    set: { isSelected in
-                                        Task {
-                                            await calendarManager.setCalendarSelected(calendar, isSelected: isSelected)
-                                        }
-                                    }
-                                )) {
-                                    HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(Color(calendar.color))
-                                            .frame(width: 8, height: 8)
-                                        Text(calendar.title)
-                                    }
-                                }
-                                .disabled(!showCalendar)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .onAppear {
-            Task {
-                await calendarManager.checkCalendarAuthorization()
-                await calendarManager.checkReminderAuthorization()
-            }
-        }
-        .navigationTitle("Calendar")
-    }
-
-    private func statusText(for status: EKAuthorizationStatus) -> String {
-        switch status {
-        case .fullAccess, .authorized: return String(localized: "Full Access")
-        case .writeOnly: return String(localized: "Write Only")
-        case .denied: return String(localized: "Denied")
-        case .restricted: return String(localized: "Restricted")
-        case .notDetermined: return String(localized: "Not Determined")
-        @unknown default: return String(localized: "Unknown")
-        }
-    }
-
-    private func color(for status: EKAuthorizationStatus) -> Color {
-        switch status {
-        case .fullAccess, .authorized: return .green
-        case .writeOnly: return .yellow
-        case .denied, .restricted: return .red
-        case .notDetermined: return .secondary
-        @unknown default: return .secondary
-        }
-    }
-}
-
 struct About: View {
     @State private var showBuildNumber: Bool = false
-    @Default(.updateChannel) var updateChannel
-    let updaterController: SPUStandardUpdaterController
     @Environment(\.openWindow) var openWindow
+
     var body: some View {
         VStack {
             Form {
@@ -3574,16 +2828,6 @@ struct About: View {
                     HStack {
                         Text("Version")
                         Spacer()
-
-                        // Channel badge
-                        Text(UpdateChannel.buildChannel.displayName)
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color(UpdateChannel.buildChannel.badgeColor).opacity(0.2))
-                            .foregroundStyle(Color(UpdateChannel.buildChannel.badgeColor))
-                            .clipShape(Capsule())
 
                         if showBuildNumber {
                             Text("(\(Bundle.main.buildVersionNumber ?? ""))")
@@ -3600,8 +2844,6 @@ struct About: View {
                 } header: {
                     Text("Version info")
                 }
-
-                UpdaterSettingsView(updater: updaterController.updater)
 
                 HStack(spacing: 30) {
                     Spacer(minLength: 0)
@@ -3643,44 +2885,6 @@ struct About: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 5)
 
-                Section {
-                    ForEach(UpdateChannel.availableChannels) { channel in
-                        Button {
-                            updateChannel = channel
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: channel.badgeIcon)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Color(channel.badgeColor))
-                                    .frame(width: 20, alignment: .center)
-
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(channel.displayName)
-                                        .foregroundStyle(.primary)
-                                    Text(channel.description)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer()
-
-                                if updateChannel == channel {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Color(channel.badgeColor))
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Text("Current build: \(UpdateChannel.buildChannel.displayName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } header: {
-                    Text("Update channel")
-                }
                 VStack(spacing: 0) {
                     Divider()
                         .padding(.bottom, 5)
@@ -3692,13 +2896,6 @@ struct About: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-        }
-        .toolbar {
-            //            Button("Welcome window") {
-            //                openWindow(id: "onboarding")
-            //            }
-            //            .controlSize(.extraLarge)
-            CheckForUpdatesView(updater: updaterController.updater)
         }
         .navigationTitle("About")
     }
@@ -4246,16 +3443,6 @@ struct LiveActivitiesSettings: View {
                 Text("Use the Media tab to configure sneak peek, lyrics, and floating media controls.")
             }
 
-            Section {
-                Defaults.Toggle(key: .enableReminderLiveActivity) {
-                    Text("Enable reminder live activity")
-                }
-                .settingsHighlight(id: highlightID("Enable reminder live activity"))
-            } header: {
-                Text("Reminder Live Activity")
-            } footer: {
-                Text("Configure countdown style and lock screen widgets in the Calendar tab.")
-            }
         }
         .navigationTitle("Live Activities")
         .onAppear {
@@ -4282,12 +3469,7 @@ struct Appearance: View {
     @Default(.lockScreenGlassCustomizationMode) private var lockScreenGlassCustomizationMode
     @Default(.lockScreenGlassStyle) private var lockScreenGlassStyle
     @Default(.lockScreenMusicLiquidGlassVariant) private var lockScreenMusicLiquidGlassVariant
-    @Default(.lockScreenTimerLiquidGlassVariant) private var lockScreenTimerLiquidGlassVariant
-    @Default(.lockScreenTimerGlassStyle) private var lockScreenTimerGlassStyle
-    @Default(.lockScreenTimerGlassCustomizationMode) private var lockScreenTimerGlassCustomizationMode
-    @Default(.lockScreenTimerWidgetUsesBlur) private var timerGlassModeIsGlass
     @Default(.enableLockScreenMediaWidget) private var enableLockScreenMediaWidget
-    @Default(.enableLockScreenTimerWidget) private var enableLockScreenTimerWidget
     @Default(.externalDisplayStyle) private var externalDisplayStyle
     @State private var selectedListVisualizer: CustomVisualizer? = nil
 
@@ -4330,23 +3512,6 @@ struct Appearance: View {
                 let raw = Int(newValue.rounded())
                 lockScreenMusicLiquidGlassVariant = LiquidGlassVariant.clamped(raw)
             }
-        )
-    }
-
-    private var appearanceTimerVariantBinding: Binding<Double> {
-        Binding(
-            get: { Double(lockScreenTimerLiquidGlassVariant.rawValue) },
-            set: { newValue in
-                let raw = Int(newValue.rounded())
-                lockScreenTimerLiquidGlassVariant = LiquidGlassVariant.clamped(raw)
-            }
-        )
-    }
-
-    private var timerSurfaceBinding: Binding<LockScreenTimerSurfaceMode> {
-        Binding(
-            get: { timerGlassModeIsGlass ? .glass : .classic },
-            set: { mode in timerGlassModeIsGlass = (mode == .glass) }
         )
     }
 
@@ -4449,19 +3614,6 @@ struct Appearance: View {
                         .disabled(!enableLockScreenMediaWidget)
                         .opacity(enableLockScreenMediaWidget ? 1 : 0.4)
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Timer widget variant")
-                                Spacer()
-                                Text("v\(lockScreenTimerLiquidGlassVariant.rawValue)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Slider(value: appearanceTimerVariantBinding, in: liquidVariantRange, step: 1)
-                        }
-                        .settingsHighlight(id: highlightID("Timer widget variant (appearance)"))
-                        .disabled(!enableLockScreenTimerWidget)
-                        .opacity(enableLockScreenTimerWidget ? 1 : 0.4)
                     }
                 } else {
                     Text("Custom Liquid settings require the Liquid Glass material.")
@@ -5029,43 +4181,12 @@ struct Appearance: View {
 }
 
 struct LockScreenSettings: View {
-    @ObservedObject private var calendarManager = CalendarManager.shared
-    @ObservedObject private var previewManager = LockScreenWidgetPreviewManager.shared
     @Default(.lockScreenGlassStyle) private var lockScreenGlassStyle
     @Default(.lockScreenGlassCustomizationMode) private var lockScreenGlassCustomizationMode
     @Default(.lockScreenMusicLiquidGlassVariant) private var lockScreenMusicLiquidGlassVariant
-    @Default(.lockScreenTimerLiquidGlassVariant) private var lockScreenTimerLiquidGlassVariant
-    @Default(.lockScreenTimerGlassStyle) private var lockScreenTimerGlassStyle
-    @Default(.lockScreenTimerGlassCustomizationMode) private var lockScreenTimerGlassCustomizationMode
-    @Default(.lockScreenTimerWidgetUsesBlur) private var timerGlassModeIsGlass
     @Default(.enableLockScreenMediaWidget) private var enableLockScreenMediaWidget
     @Default(.lockScreenMusicFullscreenArtworkEnabled) private var lockScreenMusicFullscreenArtworkEnabled
-    @Default(.enableLockScreenTimerWidget) private var enableLockScreenTimerWidget
-    @Default(.enableLockScreenWeatherWidget) private var enableLockScreenWeatherWidget
-    @Default(.enableLockScreenFocusWidget) private var enableLockScreenFocusWidget
-    @Default(.lockScreenWeatherWidgetStyle) private var lockScreenWeatherWidgetStyle
-    @Default(.lockScreenWeatherProviderSource) private var lockScreenWeatherProviderSource
-    @Default(.lockScreenWeatherTemperatureUnit) private var lockScreenWeatherTemperatureUnit
-    @Default(.lockScreenBatteryShowsCharging) private var lockScreenWeatherShowsCharging
-    @Default(.lockScreenBatteryShowsBatteryGauge) private var lockScreenWeatherShowsBatteryGauge
-    @Default(.lockScreenWeatherShowsAQI) private var lockScreenWeatherShowsAQI
-    @Default(.lockScreenWeatherShowsSunrise) private var lockScreenWeatherShowsSunrise
-    @Default(.lockScreenWeatherAQIScale) private var lockScreenWeatherAQIScale
-    @Default(.enableLockScreenReminderWidget) private var enableLockScreenReminderWidget
-    @Default(.lockScreenReminderChipStyle) private var lockScreenReminderChipStyle
-    @Default(.lockScreenReminderWidgetHorizontalAlignment) private var lockScreenReminderWidgetHorizontalAlignment
-    @Default(.lockScreenReminderWidgetVerticalOffset) private var lockScreenReminderWidgetVerticalOffset
     @Default(.showStandardMediaControls) private var showStandardMediaControls
-    @Default(.lockScreenShowCalendarCountdown) private var lockScreenShowCalendarCountdown
-    @Default(.lockScreenShowCalendarEvent) private var lockScreenShowCalendarEvent
-    @Default(.lockScreenShowCalendarEventEntireDuration) private var lockScreenShowCalendarEventEntireDuration
-    @Default(.lockScreenShowCalendarEventAfterStartWindow) private var lockScreenShowCalendarEventAfterStartWindow
-    @Default(.lockScreenShowCalendarTimeRemaining) private var lockScreenShowCalendarTimeRemaining
-    @Default(.lockScreenShowCalendarStartTimeAfterBegins) private var lockScreenShowCalendarStartTimeAfterBegins
-    @Default(.lockScreenCalendarEventLookaheadWindow) private var lockScreenCalendarEventLookaheadWindow
-    @Default(.lockScreenCalendarSelectionMode) private var lockScreenCalendarSelectionMode
-    @Default(.lockScreenSelectedCalendarIDs) private var lockScreenSelectedCalendarIDs
-    @Default(.lockScreenShowCalendarEventAfterStartEnabled) private var lockScreenShowCalendarEventAfterStartEnabled
     @Default(.lockScreenMusicMergedAirPlayOutput) private var lockScreenMusicMergedAirPlayOutput
     @ObservedObject private var musicManager = MusicManager.shared
 
@@ -5081,48 +4202,6 @@ struct LockScreenSettings: View {
         Double(LiquidGlassVariant.supportedRange.lowerBound)...Double(LiquidGlassVariant.supportedRange.upperBound)
     }
 
-    private enum CalendarLookaheadOption: String, CaseIterable, Identifiable {
-        case mins15 = "15m"
-        case mins30 = "30m"
-        case hour1 = "1h"
-        case hours3 = "3h"
-        case hours6 = "6h"
-        case hours12 = "12h"
-        case restOfDay = "rest_of_day"
-        case allTime = "all_time"
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .mins15: return "15 mins"
-            case .mins30: return "30 mins"
-            case .hour1: return "1 hour"
-            case .hours3: return "3 hours"
-            case .hours6: return "6 hours"
-            case .hours12: return "12 hours"
-            case .restOfDay: return "Rest of the day"
-            case .allTime: return "All time"
-            }
-        }
-    }
-
-    private enum ReminderAlignmentOption: String, CaseIterable, Identifiable {
-        case leading
-        case center
-        case trailing
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .leading: return "Left"
-            case .center: return "Center"
-            case .trailing: return "Right"
-            }
-        }
-    }
-
     private var musicVariantBinding: Binding<Double> {
         Binding(
             get: { Double(lockScreenMusicLiquidGlassVariant.rawValue) },
@@ -5130,23 +4209,6 @@ struct LockScreenSettings: View {
                 let raw = Int(newValue.rounded())
                 lockScreenMusicLiquidGlassVariant = LiquidGlassVariant.clamped(raw)
             }
-        )
-    }
-
-    private var timerVariantBinding: Binding<Double> {
-        Binding(
-            get: { Double(lockScreenTimerLiquidGlassVariant.rawValue) },
-            set: { newValue in
-                let raw = Int(newValue.rounded())
-                lockScreenTimerLiquidGlassVariant = LiquidGlassVariant.clamped(raw)
-            }
-        )
-    }
-
-    private var timerSurfaceBinding: Binding<LockScreenTimerSurfaceMode> {
-        Binding(
-            get: { timerGlassModeIsGlass ? .glass : .classic },
-            set: { mode in timerGlassModeIsGlass = (mode == .glass) }
         )
     }
 
@@ -5165,18 +4227,6 @@ struct LockScreenSettings: View {
                 Text("Live Activity & Feedback")
             } footer: {
                 Text("Controls whether Dynamic Island mirrors lock/unlock events with its own live activity and audible chimes.")
-            }
-
-            Section {
-                Button(previewManager.isPreviewVisible ? "Hide lock screen preview" : "Preview lock screen widgets") {
-                    previewManager.togglePreview()
-                }
-                .buttonStyle(.borderedProminent)
-                .settingsHighlight(id: highlightID("Preview lock screen widgets"))
-            } header: {
-                Text("Preview")
-            } footer: {
-                Text("Opens a transparent preview window with mock data that mirrors the current lock screen widget configuration.")
             }
 
             Section {
@@ -5309,374 +4359,6 @@ struct LockScreenSettings: View {
             .disabled(!showStandardMediaControls)
             .opacity(showStandardMediaControls ? 1 : 0.5)
 
-            Section {
-                Defaults.Toggle(key: .enableLockScreenTimerWidget) {
-                    Text("Show lock screen timer")
-                }
-                .settingsHighlight(id: highlightID("Show lock screen timer"))
-                Picker("Timer surface", selection: timerSurfaceBinding) {
-                    ForEach(LockScreenTimerSurfaceMode.allCases) { mode in
-                        Text(mode.localizedName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(!enableLockScreenTimerWidget)
-                .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-                .settingsHighlight(id: highlightID("Timer surface"))
-
-                if timerGlassModeIsGlass {
-                    Picker("Timer glass material", selection: $lockScreenTimerGlassStyle) {
-                        ForEach(LockScreenGlassStyle.allCases) { style in
-                            Text(style.localizedName).tag(style)
-                        }
-                    }
-                    .disabled(!enableLockScreenTimerWidget)
-                    .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-                    .settingsHighlight(id: highlightID("Timer glass material"))
-
-                    if lockScreenTimerGlassStyle == .liquid {
-                        Picker("Timer liquid mode", selection: $lockScreenTimerGlassCustomizationMode) {
-                            ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
-                                Text(mode.localizedName).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(!enableLockScreenTimerWidget)
-                        .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-                        .settingsHighlight(id: highlightID("Timer liquid mode"))
-
-                        if lockScreenTimerGlassCustomizationMode == .customLiquid {
-                            variantSlider(
-                                title: "Timer widget variant",
-                                value: timerVariantBinding,
-                                currentValue: lockScreenTimerLiquidGlassVariant.rawValue,
-                                isEnabled: enableLockScreenTimerWidget,
-                                highlight: highlightID("Timer widget variant")
-                            )
-                        }
-                    } else {
-                        Text("Uses the frosted blur treatment while glass mode is enabled.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                } else {
-                    Text("Classic mode keeps the original translucent black background.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-                }
-            } header: {
-                Text("Timer Widget")
-            } footer: {
-                Text("Controls the optional timer widget that floats above the media panel, including its classic, frosted, or liquid glass surface independent of the global material setting.")
-            }
-
-            Section {
-                Defaults.Toggle(key: .enableLockScreenWeatherWidget) {
-                    Text("Show lock screen weather")
-                }
-                .settingsHighlight(id: highlightID("Show lock screen weather"))
-
-                if enableLockScreenWeatherWidget {
-                    Picker("Layout", selection: $lockScreenWeatherWidgetStyle) {
-                        ForEach(LockScreenWeatherWidgetStyle.allCases) { style in
-                            Text(style.localizedName).tag(style)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .settingsHighlight(id: highlightID("Layout"))
-
-                    Picker("Weather data provider", selection: $lockScreenWeatherProviderSource) {
-                        ForEach(LockScreenWeatherProviderSource.allCases) { source in
-                            Text(source.displayName).tag(source)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .settingsHighlight(id: highlightID("Weather data provider"))
-
-                    Picker("Temperature unit", selection: $lockScreenWeatherTemperatureUnit) {
-                        ForEach(LockScreenWeatherTemperatureUnit.allCases) { unit in
-                            Text(unit.localizedName).tag(unit)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .settingsHighlight(id: highlightID("Temperature unit"))
-
-                    Defaults.Toggle(key: .lockScreenWeatherShowsLocation) {
-                        Text("Show location label")
-                    }
-                    .disabled(lockScreenWeatherWidgetStyle == .circular)
-                    .settingsHighlight(id: highlightID("Show location label"))
-
-                    Defaults.Toggle(key: .lockScreenWeatherShowsSunrise) {
-                        Text("Show sunrise time")
-                    }
-                    .disabled(lockScreenWeatherWidgetStyle != .inline)
-                    .settingsHighlight(id: highlightID("Show sunrise time"))
-
-                    Defaults.Toggle(key: .lockScreenWeatherShowsAQI) {
-                        Text("Show AQI widget")
-                    }
-                    .disabled(!lockScreenWeatherProviderSource.supportsAirQuality)
-                    .settingsHighlight(id: highlightID("Show AQI widget"))
-
-                    if lockScreenWeatherShowsAQI && lockScreenWeatherProviderSource.supportsAirQuality {
-                        Picker("Air quality scale", selection: $lockScreenWeatherAQIScale) {
-                            ForEach(LockScreenWeatherAirQualityScale.allCases) { scale in
-                                Text(scale.displayName).tag(scale)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .settingsHighlight(id: highlightID("Air quality scale"))
-                    }
-
-                    if !lockScreenWeatherProviderSource.supportsAirQuality {
-                        Text("Air quality requires the Open Meteo provider.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Defaults.Toggle(key: .lockScreenWeatherUsesGaugeTint) {
-                        Text("Use colored gauges")
-                    }
-                    .settingsHighlight(id: highlightID("Use colored gauges"))
-                }
-            } header: {
-                Text("Weather Widget")
-            } footer: {
-                Text("Enable the weather capsule and configure its layout, provider, units, and optional battery/AQI indicators.")
-            }
-
-            Section {
-                Defaults.Toggle(key: .enableLockScreenReminderWidget) {
-                    Text("Show lock screen reminder")
-                }
-                .settingsHighlight(id: highlightID("Show lock screen reminder"))
-
-                Picker("Chip color", selection: $lockScreenReminderChipStyle) {
-                    ForEach(LockScreenReminderChipStyle.allCases) { style in
-                        Text(style.localizedName).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(!enableLockScreenReminderWidget)
-                .settingsHighlight(id: highlightID("Chip color"))
-
-                Picker("Alignment", selection: $lockScreenReminderWidgetHorizontalAlignment) {
-                    ForEach(ReminderAlignmentOption.allCases) { option in
-                        Text(option.title).tag(option.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(!enableLockScreenReminderWidget)
-                .settingsHighlight(id: highlightID("Reminder alignment"))
-
-                HStack {
-                    Text("Vertical offset")
-                    Slider(
-                        value: $lockScreenReminderWidgetVerticalOffset,
-                        in: -160...160,
-                        step: 2
-                    )
-                    .disabled(!enableLockScreenReminderWidget)
-                    Text("\(Int(lockScreenReminderWidgetVerticalOffset)) px")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 70, alignment: .trailing)
-                }
-                .settingsHighlight(id: highlightID("Reminder vertical offset"))
-            } header: {
-                Text("Reminder Widget")
-            } footer: {
-                Text("Controls the lock screen reminder chip and its positioning.")
-            }
-
-            if BatteryActivityManager.shared.hasBattery() {
-                Section {
-                    Defaults.Toggle(key: .lockScreenBatteryShowsBatteryGauge) {
-                        Text("Show battery indicator")
-                    }
-                    .settingsHighlight(id: highlightID("Show battery indicator"))
-
-                    if lockScreenWeatherShowsBatteryGauge {
-                        Defaults.Toggle(key: .lockScreenBatteryUsesLaptopSymbol) {
-                            Text("Use MacBook icon when on battery")
-                        }
-                        .settingsHighlight(id: highlightID("Use MacBook icon when on battery"))
-
-                        Defaults.Toggle(key: .lockScreenBatteryShowsCharging) {
-                            Text("Show charging status")
-                        }
-                        .settingsHighlight(id: highlightID("Show charging status"))
-
-                        if lockScreenWeatherShowsCharging {
-                            Defaults.Toggle(key: .lockScreenBatteryShowsChargingPercentage) {
-                                Text("Show charging percentage")
-                            }
-                            .settingsHighlight(id: highlightID("Show charging percentage"))
-                        }
-
-                        Defaults.Toggle(key: .lockScreenBatteryShowsBluetooth) {
-                            Text("Show Bluetooth battery")
-                        }
-                        .settingsHighlight(id: highlightID("Show Bluetooth battery"))
-                    }
-                } header: {
-                    Text("Battery Widget")
-                } footer: {
-                    Text("Enable the battery capsule and configure its layout.")
-                }
-            }
-
-            Section {
-                Defaults.Toggle(key: .enableLockScreenFocusWidget) {
-                    Text("Show focus widget")
-                }
-                .settingsHighlight(id: highlightID("Show focus widget"))
-            } header: {
-                Text("Focus Widget")
-            } footer: {
-                Text("Displays the current Focus state above the weather capsule whenever Focus detection is enabled.")
-            }
-
-            Section {
-                Defaults.Toggle(key: .lockScreenShowCalendarEvent) {
-                    Text("Show next calendar event")
-                }
-                .settingsHighlight(id: highlightID("Show next calendar event"))
-
-                LabeledContent("Show events within the next") {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Picker("", selection: $lockScreenCalendarEventLookaheadWindow) {
-                            ForEach(CalendarLookaheadOption.allCases) { option in
-                                Text(option.title).tag(option.rawValue)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .disabled(!lockScreenShowCalendarEvent)
-                .settingsHighlight(id: highlightID("Show events within the next"))
-
-                Toggle("Show events from all calendars", isOn: Binding(
-                    get: { lockScreenCalendarSelectionMode == "all" },
-                    set: { useAll in
-                        if useAll {
-                            lockScreenCalendarSelectionMode = "all"
-                        } else {
-                            lockScreenCalendarSelectionMode = "selected"
-                            lockScreenSelectedCalendarIDs = Set(calendarManager.eventCalendars.map { $0.id })
-                        }
-                    }
-                ))
-                .disabled(!lockScreenShowCalendarEvent)
-                .settingsHighlight(id: highlightID("Show events from all calendars"))
-
-                if lockScreenCalendarSelectionMode != "all" {
-                    HStack {
-                        Spacer()
-                        Button("Deselect All") {
-                            lockScreenSelectedCalendarIDs = []
-                        }
-                        .buttonStyle(.link)
-                    }
-                    .padding(.top, 2)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(calendarManager.eventCalendars, id: \.id) { calendar in
-                            Toggle(isOn: Binding(
-                                get: { lockScreenSelectedCalendarIDs.contains(calendar.id) },
-                                set: { isOn in
-                                    if isOn {
-                                        lockScreenSelectedCalendarIDs.insert(calendar.id)
-                                    } else {
-                                        lockScreenSelectedCalendarIDs.remove(calendar.id)
-                                    }
-                                }
-                            )) {
-                                HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(Color(calendar.color))
-                                        .frame(width: 8, height: 8)
-                                    Text(calendar.title)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.top, 4)
-                    .padding(.leading, 2)
-                    .disabled(!lockScreenShowCalendarEvent)
-                }
-
-                Defaults.Toggle(key: .lockScreenShowCalendarCountdown) {
-                    Text("Show countdown")
-                }
-                .disabled(!lockScreenShowCalendarEvent)
-                .settingsHighlight(id: highlightID("Show countdown"))
-
-                Defaults.Toggle(key: .lockScreenShowCalendarEventEntireDuration) {
-                    Text("Show event for entire duration")
-                }
-                .disabled(!lockScreenShowCalendarEvent)
-                .settingsHighlight(id: highlightID("Show event for entire duration"))
-                .onChange(of: Defaults[.lockScreenShowCalendarEventEntireDuration]) { _, newValue in
-                    if newValue {
-                        Defaults[.lockScreenShowCalendarEventAfterStartEnabled] = false
-                    }
-                }
-
-                Defaults.Toggle(
-                    "Hide active event and show next upcoming event",
-                    key: .lockScreenShowCalendarEventAfterStartEnabled
-                )
-                .disabled(!lockScreenShowCalendarEvent || lockScreenShowCalendarEventEntireDuration)
-                .settingsHighlight(id: highlightID("Hide active event and show next upcoming event"))
-
-                LabeledContent("Show event after it starts") {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Picker("", selection: $lockScreenShowCalendarEventAfterStartWindow) {
-                            Text("1 min").tag("1m")
-                            Text("5 mins").tag("5m")
-                            Text("10 mins").tag("10m")
-                            Text("15 mins").tag("15m")
-                            Text("30 mins").tag("30m")
-                            Text("45 mins").tag("45m")
-                            Text("1 hour").tag("1h")
-                            Text("2 hours").tag("2h")
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .disabled(!lockScreenShowCalendarEvent || lockScreenShowCalendarEventEntireDuration || !lockScreenShowCalendarEventAfterStartEnabled)
-
-                Text("Turn off 'Show event for entire duration' to use the post-start duration option.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Defaults.Toggle(key: .lockScreenShowCalendarTimeRemaining) {
-                    Text("Show time remaining")
-                }
-                .disabled(!lockScreenShowCalendarEvent)
-                .settingsHighlight(id: highlightID("Show time remaining"))
-
-                Defaults.Toggle(key: .lockScreenShowCalendarStartTimeAfterBegins) {
-                    Text("Show start time after event begins")
-                }
-                .disabled(!lockScreenShowCalendarEvent)
-                .settingsHighlight(id: highlightID("Show start time after event begins"))
-            } header: {
-                Text("Calendar Widget")
-            } footer: {
-                Text("Displays your next upcoming calendar event above or below the weather capsule. Calendar selection here is independent from the Dynamic Island calendar filter.")
-            }
-
             LockScreenPositioningControls()
 
             Section {
@@ -5798,39 +4480,13 @@ private struct LockScreenGlassVariantPreviewCell: View {
 }
 
 private struct LockScreenPositioningControls: View {
-    @Default(.lockScreenWeatherVerticalOffset) private var weatherOffset
     @Default(.lockScreenMusicVerticalOffset) private var musicOffset
-    @Default(.lockScreenTimerVerticalOffset) private var timerOffset
     @Default(.lockScreenMusicPanelWidth) private var musicWidth
-    @Default(.lockScreenTimerWidgetWidth) private var timerWidth
     private let offsetRange: ClosedRange<Double> = -160...160
     private let musicWidthRange: ClosedRange<Double> = 320...Double(LockScreenMusicPanel.defaultCollapsedWidth)
-    private let timerWidthRange: ClosedRange<Double> = 320...LockScreenTimerWidget.defaultWidth
 
     var body: some View {
         Section {
-            let weatherBinding = Binding<Double>(
-                get: { weatherOffset },
-                set: { newValue in
-                    let clampedValue = clampOffset(newValue)
-                    if weatherOffset != clampedValue {
-                        weatherOffset = clampedValue
-                    }
-                    propagateWeatherOffsetChange(animated: false)
-                }
-            )
-
-            let timerBinding = Binding<Double>(
-                get: { timerOffset },
-                set: { newValue in
-                    let clampedValue = clampOffset(newValue)
-                    if timerOffset != clampedValue {
-                        timerOffset = clampedValue
-                    }
-                    propagateTimerOffsetChange(animated: false)
-                }
-            )
-
             let musicBinding = Binding<Double>(
                 get: { musicOffset },
                 set: { newValue in
@@ -5853,48 +4509,14 @@ private struct LockScreenPositioningControls: View {
                 }
             )
 
-            let timerWidthBinding = Binding<Double>(
-                get: { timerWidth },
-                set: { newValue in
-                    let clampedValue = clamp(newValue, within: timerWidthRange)
-                    if timerWidth != clampedValue {
-                        timerWidth = clampedValue
-                        propagateTimerWidthChange(animated: false)
-                    }
-                }
-            )
-
             LockScreenPositioningPreview(
-                weatherOffset: weatherBinding,
-                timerOffset: timerBinding,
                 musicOffset: musicBinding,
-                musicWidth: musicWidthBinding,
-                timerWidth: timerWidthBinding
+                musicWidth: musicWidthBinding
             )
             .frame(height: 260)
             .padding(.vertical, 8)
 
             HStack(alignment: .top, spacing: 24) {
-                offsetColumn(
-                    title: String(localized: "Weather"),
-                    value: weatherOffset,
-                    resetTitle: String(localized: "Reset Weather"),
-                    resetAction: resetWeatherOffset
-                )
-
-                Divider()
-                    .frame(height: 64)
-
-                offsetColumn(
-                    title: String(localized: "Timer"),
-                    value: timerOffset,
-                    resetTitle: String(localized: "Reset Timer"),
-                    resetAction: resetTimerOffset
-                )
-
-                Divider()
-                    .frame(height: 64)
-
                 offsetColumn(
                     title: String(localized: "Music"),
                     value: musicOffset,
@@ -5917,20 +4539,11 @@ private struct LockScreenPositioningControls: View {
                     resetAction: resetMusicWidth,
                     helpText: String(localized: "Shrinks the lock screen media panel while keeping the expanded view full width.")
                 )
-
-                widthSlider(
-                    title: String(localized: "Timer Widget Width"),
-                    value: timerWidthBinding,
-                    range: timerWidthRange,
-                    resetTitle: String(localized: "Reset Timer Width"),
-                    resetAction: resetTimerWidth,
-                    helpText: String(localized: "Adjusts the lock screen timer widget width without affecting button sizing.")
-                )
             }
         } header: {
             Text("Lock Screen Positioning")
         } footer: {
-            Text("Drag the previews to adjust vertical placement. Positive values lift the panel; negative values lower it. Use the width sliders below to narrow the media and timer widgets without exceeding their default size. Changes apply instantly while the widgets are visible.")
+            Text("Drag the preview to adjust vertical placement. Positive values lift the panel; negative values lower it. Use the width slider below to narrow the media panel without exceeding its default size. Changes apply instantly while the panel is visible.")
                 .textCase(nil)
         }
     }
@@ -5943,16 +4556,6 @@ private struct LockScreenPositioningControls: View {
         min(max(value, range.lowerBound), range.upperBound)
     }
 
-    private func resetWeatherOffset() {
-        weatherOffset = 0
-        propagateWeatherOffsetChange(animated: true)
-    }
-
-    private func resetTimerOffset() {
-        timerOffset = 0
-        propagateTimerOffsetChange(animated: true)
-    }
-
     private func resetMusicOffset() {
         musicOffset = 0
         propagateMusicOffsetChange(animated: true)
@@ -5961,23 +4564,6 @@ private struct LockScreenPositioningControls: View {
     private func resetMusicWidth() {
         musicWidth = Double(LockScreenMusicPanel.defaultCollapsedWidth)
         propagateMusicWidthChange(animated: true)
-    }
-
-    private func resetTimerWidth() {
-        timerWidth = LockScreenTimerWidget.defaultWidth
-        propagateTimerWidthChange(animated: true)
-    }
-
-    private func propagateWeatherOffsetChange(animated: Bool) {
-        Task { @MainActor in
-            LockScreenWeatherPanelManager.shared.refreshPositionForOffsets(animated: animated)
-        }
-    }
-
-    private func propagateTimerOffsetChange(animated: Bool) {
-        Task { @MainActor in
-            LockScreenTimerWidgetManager.shared.refreshPositionForOffsets(animated: animated)
-        }
     }
 
     private func propagateMusicOffsetChange(animated: Bool) {
@@ -5989,12 +4575,6 @@ private struct LockScreenPositioningControls: View {
     private func propagateMusicWidthChange(animated: Bool) {
         Task { @MainActor in
             LockScreenPanelManager.shared.applyOffsetAdjustment(animated: animated)
-        }
-    }
-
-    private func propagateTimerWidthChange(animated: Bool) {
-        Task { @MainActor in
-            LockScreenTimerWidgetPanelManager.shared.refreshPosition(animated: animated)
         }
     }
 
@@ -6061,17 +4641,10 @@ private struct LockScreenPositioningControls: View {
 }
 
 private struct LockScreenPositioningPreview: View {
-    @Binding var weatherOffset: Double
-    @Binding var timerOffset: Double
     @Binding var musicOffset: Double
     @Binding var musicWidth: Double
-    @Binding var timerWidth: Double
 
-    @State private var weatherStartOffset: Double = 0
-    @State private var timerStartOffset: Double = 0
     @State private var musicStartOffset: Double = 0
-    @State private var isWeatherDragging = false
-    @State private var isTimerDragging = false
     @State private var isMusicDragging = false
 
     private let offsetRange: ClosedRange<Double> = -160...160
@@ -6087,17 +4660,9 @@ private struct LockScreenPositioningPreview: View {
                 height: geometry.size.height - (screenPadding * 2)
             )
             let centerX = screenRect.midX
-            let weatherBaseY = screenRect.minY + (screenRect.height * 0.28)
-            let timerBaseY = screenRect.minY + (screenRect.height * 0.5)
             let musicBaseY = screenRect.minY + (screenRect.height * 0.78)
-            let weatherSize = CGSize(width: screenRect.width * 0.42, height: screenRect.height * 0.22)
             let defaultMusicWidth = Double(LockScreenMusicPanel.defaultCollapsedWidth)
             let musicWidthScale = CGFloat(musicWidth / defaultMusicWidth)
-            let timerWidthScale = CGFloat(timerWidth / LockScreenTimerWidget.defaultWidth)
-            let timerSize = CGSize(
-                width: (screenRect.width * 0.5) * timerWidthScale,
-                height: screenRect.height * 0.2
-            )
             let musicSize = CGSize(
                 width: (screenRect.width * 0.56) * musicWidthScale,
                 height: screenRect.height * 0.34
@@ -6114,48 +4679,13 @@ private struct LockScreenPositioningPreview: View {
                     .shadow(color: Color.black.opacity(0.22), radius: 20, x: 0, y: 18)
                     .position(x: screenRect.midX, y: screenRect.midY)
 
-                weatherPanel(size: weatherSize)
-                    .position(x: centerX, y: weatherBaseY - CGFloat(weatherOffset))
-                    .gesture(weatherDragGesture(in: screenRect, baseY: weatherBaseY, panelSize: weatherSize))
-
-                timerPanel(size: timerSize)
-                    .position(x: centerX, y: timerBaseY - CGFloat(timerOffset))
-                    .gesture(timerDragGesture(in: screenRect, baseY: timerBaseY, panelSize: timerSize))
-
                 musicPanel(size: musicSize)
                     .position(x: centerX, y: musicBaseY - CGFloat(musicOffset))
                     .gesture(musicDragGesture(in: screenRect, baseY: musicBaseY, panelSize: musicSize))
             }
         }
-        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.82), value: weatherOffset)
         .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.82), value: musicOffset)
-        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.82), value: timerOffset)
         .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.82), value: musicWidth)
-        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.82), value: timerWidth)
-    }
-
-    private func weatherPanel(size: CGSize) -> some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.78), Color.blue.opacity(0.52)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: size.width, height: size.height)
-            .overlay(alignment: .leading) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Weather", systemImage: "cloud.sun.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                    Text("Inline snapshot preview")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.white.opacity(0.72))
-                }
-                .padding(.horizontal, 16)
-            }
-            .shadow(color: Color.blue.opacity(0.22), radius: 10, x: 0, y: 8)
     }
 
     private func musicPanel(size: CGSize) -> some View {
@@ -6182,50 +4712,6 @@ private struct LockScreenPositioningPreview: View {
             .shadow(color: Color.purple.opacity(0.24), radius: 12, x: 0, y: 9)
     }
 
-    private func timerPanel(size: CGSize) -> some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [Color.orange.opacity(0.75), Color.purple.opacity(0.55)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: size.width, height: size.height)
-            .overlay {
-                VStack(spacing: 6) {
-                    Text("Timer")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text("00:05:00")
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white)
-                }
-            }
-            .shadow(color: Color.orange.opacity(0.3), radius: 12, x: 0, y: 8)
-    }
-
-    private func weatherDragGesture(in screenRect: CGRect, baseY: CGFloat, panelSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !isWeatherDragging {
-                    isWeatherDragging = true
-                    weatherStartOffset = weatherOffset
-                }
-
-                let proposed = weatherStartOffset - Double(value.translation.height)
-                weatherOffset = clampedOffset(
-                    proposed,
-                    baseCenterY: baseY,
-                    panelHeight: panelSize.height,
-                    screenRect: screenRect
-                )
-            }
-            .onEnded { _ in
-                isWeatherDragging = false
-            }
-    }
-
     private func musicDragGesture(in screenRect: CGRect, baseY: CGFloat, panelSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
@@ -6244,27 +4730,6 @@ private struct LockScreenPositioningPreview: View {
             }
             .onEnded { _ in
                 isMusicDragging = false
-            }
-    }
-
-    private func timerDragGesture(in screenRect: CGRect, baseY: CGFloat, panelSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !isTimerDragging {
-                    isTimerDragging = true
-                    timerStartOffset = timerOffset
-                }
-
-                let proposed = timerStartOffset - Double(value.translation.height)
-                timerOffset = clampedOffset(
-                    proposed,
-                    baseCenterY: baseY,
-                    panelHeight: panelSize.height,
-                    screenRect: screenRect
-                )
-            }
-            .onEnded { _ in
-                isTimerDragging = false
             }
     }
 
@@ -6322,11 +4787,7 @@ private func copyLatestCrashReport() {
 }
 
 struct Shortcuts: View {
-    @Default(.enableTimerFeature) var enableTimerFeature
-    @Default(.enableClipboardManager) var enableClipboardManager
     @Default(.enableShortcuts) var enableShortcuts
-    @Default(.enableStatsFeature) var enableStatsFeature
-    @Default(.enableColorPickerFeature) var enableColorPickerFeature
 
     private func highlightID(_ title: String) -> String {
         SettingsTab.shortcuts.highlightID(for: title)
@@ -6373,120 +4834,6 @@ struct Shortcuts: View {
                         .font(.caption)
                 }
 
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            KeyboardShortcuts.Recorder("Start Demo Timer:", name: .startDemoTimer)
-                                .disabled(!enableShortcuts || !enableTimerFeature)
-                            if !enableTimerFeature {
-                                Text("Timer feature is disabled")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 2)
-                            }
-                        }
-                        Spacer()
-                    }
-                } header: {
-                    Text("Timer")
-                } footer: {
-                    Text("Starts a 5-minute demo timer to test the timer live activity feature. Only works when timer feature is enabled.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            KeyboardShortcuts.Recorder("Clipboard History:", name: .clipboardHistoryPanel)
-                                .disabled(!enableShortcuts || !enableClipboardManager)
-                            if !enableClipboardManager {
-                                Text("Clipboard feature is disabled")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 2)
-                            }
-                        }
-                        Spacer()
-                    }
-                } header: {
-                    Text("Clipboard")
-                } footer: {
-                    Text("Opens the clipboard history panel. Default is Cmd+Shift+V (similar to Windows+V on PC). Only works when clipboard feature is enabled.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            KeyboardShortcuts.Recorder("Screen Assistant:", name: .screenAssistantPanel)
-                                .disabled(!enableShortcuts || !Defaults[.enableScreenAssistant])
-                            if !Defaults[.enableScreenAssistant] {
-                                Text("Screen Assistant feature is disabled")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 2)
-                            }
-                        }
-                        Spacer()
-                    }
-                } header: {
-                    Text("AI Assistant")
-                } footer: {
-                    Text("Opens the AI assistant panel for file analysis and conversation. Default is Cmd+Shift+A. Only works when screen assistant feature is enabled.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            KeyboardShortcuts.Recorder("Toggle Terminal Tab:", name: .toggleTerminalTab)
-                                .disabled(!enableShortcuts || !Defaults[.enableTerminalFeature])
-                            if !Defaults[.enableTerminalFeature] {
-                                Text("Terminal feature is disabled")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 2)
-                            }
-                        }
-                        Spacer()
-                    }
-                } header: {
-                    Text("Terminal")
-                } footer: {
-                    Text("Opens the terminal tab in the notch. Default is Ctrl+`. Only works when terminal feature is enabled.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            KeyboardShortcuts.Recorder("Color Picker Panel:", name: .colorPickerPanel)
-                                .disabled(!enableShortcuts || !enableColorPickerFeature)
-                            if !enableColorPickerFeature {
-                                Text("Color Picker feature is disabled")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 2)
-                            }
-                        }
-                        Spacer()
-                    }
-                } header: {
-                    Text("Color Picker")
-                } footer: {
-                    Text("Opens the color picker panel for screen color capture. Default is Cmd+Shift+P. Only works when color picker feature is enabled.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
             } else {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -6535,18 +4882,6 @@ func customBadge(text: String) -> some View {
         .clipShape(.capsule)
 }
 
-func alphaBadge() -> some View {
-    Text("ALPHA")
-        .font(.system(size: 10, weight: .bold))
-        .foregroundStyle(Color.white)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .fill(Color.orange.opacity(0.9))
-        )
-}
-
 func warningBadge(_ text: String, _ description: String) -> some View {
     Section {
         HStack(spacing: 12) {
@@ -6561,1384 +4896,6 @@ func warningBadge(_ text: String, _ description: String) -> some View {
             }
             Spacer()
         }
-    }
-}
-
-struct TimerSettings: View {
-    @ObservedObject private var coordinator = DynamicIslandViewCoordinator.shared
-    @Default(.enableTimerFeature) var enableTimerFeature
-    @Default(.timerPresets) private var timerPresets
-    @Default(.timerIconColorMode) private var colorMode
-    @Default(.timerSolidColor) private var solidColor
-    @Default(.timerShowsCountdown) private var showsCountdown
-    @Default(.timerShowsLabel) private var showsLabel
-    @Default(.timerShowsProgress) private var showsProgress
-    @Default(.timerProgressStyle) private var progressStyle
-    @Default(.showTimerPresetsInNotchTab) private var showTimerPresetsInNotchTab
-    @Default(.timerControlWindowEnabled) private var controlWindowEnabled
-    @Default(.mirrorSystemTimer) private var mirrorSystemTimer
-    @Default(.timerDisplayMode) private var timerDisplayMode
-    @Default(.timerInputStyle) private var timerInputStyle
-    @Default(.enableLockScreenTimerWidget) private var enableLockScreenTimerWidget
-    @Default(.lockScreenTimerWidgetUsesBlur) private var timerGlassModeIsGlass
-    @Default(.lockScreenTimerGlassStyle) private var lockScreenTimerGlassStyle
-    @Default(.lockScreenTimerGlassCustomizationMode) private var lockScreenTimerGlassCustomizationMode
-    @Default(.lockScreenTimerLiquidGlassVariant) private var lockScreenTimerLiquidGlassVariant
-    @AppStorage("customTimerDuration") private var customTimerDuration: Double = 600
-    @State private var customHours: Int = 0
-    @State private var customMinutes: Int = 10
-    @State private var customSeconds: Int = 0
-    @State private var showingResetConfirmation = false
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.timer.highlightID(for: title)
-    }
-
-    private var liquidVariantRange: ClosedRange<Double> {
-        Double(LiquidGlassVariant.supportedRange.lowerBound)...Double(LiquidGlassVariant.supportedRange.upperBound)
-    }
-
-    private var timerVariantBinding: Binding<Double> {
-        Binding(
-            get: { Double(lockScreenTimerLiquidGlassVariant.rawValue) },
-            set: { newValue in
-                let raw = Int(newValue.rounded())
-                lockScreenTimerLiquidGlassVariant = LiquidGlassVariant.clamped(raw)
-            }
-        )
-    }
-
-    private var timerSurfaceBinding: Binding<LockScreenTimerSurfaceMode> {
-        Binding(
-            get: { timerGlassModeIsGlass ? .glass : .classic },
-            set: { mode in timerGlassModeIsGlass = (mode == .glass) }
-        )
-    }
-
-    var body: some View {
-        Form {
-            timerFeatureSection
-
-            if enableTimerFeature {
-                timerConfigurationSections
-            }
-        }
-        .navigationTitle("Timer")
-        .onAppear { syncCustomDuration() }
-        .onChange(of: customTimerDuration) { _, newValue in syncCustomDuration(newValue) }
-    }
-
-    @ViewBuilder
-    private var timerFeatureSection: some View {
-        Section {
-            Defaults.Toggle(key: .enableTimerFeature) {
-                Text("Enable timer feature")
-            }
-            .settingsHighlight(id: highlightID("Enable timer feature"))
-
-            if enableTimerFeature {
-                Toggle("Enable timer live activity", isOn: $coordinator.timerLiveActivityEnabled)
-                    .animation(.easeInOut, value: coordinator.timerLiveActivityEnabled)
-                Defaults.Toggle(key: .mirrorSystemTimer) {
-                    HStack(spacing: 8) {
-                        Text("Mirror macOS Clock timers")
-                        alphaBadge()
-                    }
-                }
-                .help("Shows the system Clock timer in the notch when available. Requires Accessibility permission to read the status item.")
-                .settingsHighlight(id: highlightID("Mirror macOS Clock timers"))
-
-                Picker("Timer controls appear as", selection: $timerDisplayMode) {
-                    ForEach(TimerDisplayMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help(timerDisplayMode.description)
-                .settingsHighlight(id: highlightID("Timer controls appear as"))
-            }
-        } header: {
-            Text("Timer Feature")
-        } footer: {
-            Text("Control timer availability, live activity behaviour, and whether the app mirrors timers started from the macOS Clock app.")
-        }
-    }
-
-    @ViewBuilder
-    private var timerConfigurationSections: some View {
-        Group {
-            lockScreenIntegrationSection
-            customTimerSection
-            appearanceSection
-            timerPresetsSection
-            timerSoundSection
-        }
-        .onAppear {
-            if showsLabel {
-                controlWindowEnabled = false
-            }
-        }
-        .onChange(of: showsLabel) { _, show in
-            if show {
-                controlWindowEnabled = false
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var lockScreenIntegrationSection: some View {
-        Section {
-            Defaults.Toggle(key: .enableLockScreenTimerWidget) {
-                Text("Show lock screen timer widget")
-            }
-            .settingsHighlight(id: highlightID("Show lock screen timer widget"))
-            Picker("Timer surface", selection: timerSurfaceBinding) {
-                ForEach(LockScreenTimerSurfaceMode.allCases) { mode in
-                    Text(mode.localizedName).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(!enableLockScreenTimerWidget)
-            .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-            .settingsHighlight(id: highlightID("Timer surface"))
-
-            if timerGlassModeIsGlass {
-                Picker("Timer glass material", selection: $lockScreenTimerGlassStyle) {
-                    ForEach(LockScreenGlassStyle.allCases) { style in
-                        Text(style.localizedName).tag(style)
-                    }
-                }
-                .disabled(!enableLockScreenTimerWidget)
-                .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-                .settingsHighlight(id: highlightID("Timer glass material"))
-
-                if lockScreenTimerGlassStyle == .liquid {
-                    Picker("Timer liquid mode", selection: $lockScreenTimerGlassCustomizationMode) {
-                        ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
-                            Text(mode.localizedName).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .disabled(!enableLockScreenTimerWidget)
-                    .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-                    .settingsHighlight(id: highlightID("Timer liquid mode"))
-
-                    if lockScreenTimerGlassCustomizationMode == .customLiquid {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Timer widget variant")
-                                Spacer()
-                                Text("v\(lockScreenTimerLiquidGlassVariant.rawValue)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Slider(value: timerVariantBinding, in: liquidVariantRange, step: 1)
-                        }
-                        .settingsHighlight(id: highlightID("Timer widget variant"))
-                        .disabled(!enableLockScreenTimerWidget)
-                        .opacity(enableLockScreenTimerWidget ? 1 : 0.4)
-                    }
-                } else {
-                    Text("Uses the frosted blur treatment while glass mode is enabled.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                Text("Classic mode keeps the original translucent black background.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(enableLockScreenTimerWidget ? 1 : 0.5)
-            }
-        } header: {
-            Text("Lock Screen Integration")
-        } footer: {
-            Text("Mirrors the toggle found under Lock Screen settings so timer-specific workflows can enable or disable the widget without switching tabs.")
-        }
-    }
-
-    @ViewBuilder
-    private var customTimerSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Default Custom Timer")
-                    .font(.headline)
-
-                TimerDurationStepperRow(title: String(localized: "Hours"), value: $customHours, range: 0...23)
-                TimerDurationStepperRow(title: String(localized: "Minutes"), value: $customMinutes, range: 0...59)
-                TimerDurationStepperRow(title: String(localized: "Seconds"), value: $customSeconds, range: 0...59)
-
-                HStack {
-                    Text("Current default:")
-                        .foregroundStyle(.secondary)
-                    Text(customDurationDisplay)
-                        .font(.system(.body, design: .monospaced))
-                        .fontWeight(.medium)
-                    Spacer()
-                }
-            }
-            .padding(.vertical, 4)
-            .onChange(of: customHours) { _, _ in updateCustomDuration() }
-            .onChange(of: customMinutes) { _, _ in updateCustomDuration() }
-            .onChange(of: customSeconds) { _, _ in updateCustomDuration() }
-        } header: {
-            Text("Custom Timer")
-        } footer: {
-            Text("This duration powers the \"Custom\" option inside the timer popover for quick access.")
-        }
-    }
-
-    @ViewBuilder
-    private var appearanceSection: some View {
-        Section {
-            Picker("Timer tint", selection: $colorMode) {
-                ForEach(TimerIconColorMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .settingsHighlight(id: highlightID("Timer tint"))
-
-            if colorMode == .solid {
-                ColorPicker("Solid colour", selection: $solidColor, supportsOpacity: false)
-                    .settingsHighlight(id: highlightID("Solid colour"))
-            }
-
-            Picker("Custom timer style", selection: $timerInputStyle) {
-                ForEach(TimerInputStyle.allCases) { style in
-                    Text(style.displayName).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .settingsHighlight(id: highlightID("Custom timer style"))
-
-            Toggle("Show timer name", isOn: $showsLabel)
-            Toggle("Show countdown", isOn: $showsCountdown)
-            Toggle("Show progress", isOn: $showsProgress)
-            Toggle("Show preset list in timer tab", isOn: $showTimerPresetsInNotchTab)
-                .settingsHighlight(id: highlightID("Show preset list in timer tab"))
-
-            Toggle("Show floating pause/stop controls", isOn: $controlWindowEnabled)
-                .disabled(showsLabel)
-                .help("These controls sit beside the notch while a timer runs. They require the timer name to stay hidden for spacing.")
-
-            Picker("Progress style", selection: $progressStyle) {
-                ForEach(TimerProgressStyle.allCases) { style in
-                    Text(style.localizedName).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(!showsProgress)
-            .settingsHighlight(id: highlightID("Progress style"))
-        } header: {
-            Text("Appearance")
-        } footer: {
-            Text("Configure how the timer looks inside the closed notch. Progress can render as a ring around the icon or as horizontal bars.")
-        }
-    }
-
-    @ViewBuilder
-    private var timerPresetsSection: some View {
-        Section {
-            if timerPresets.isEmpty {
-                Text("No presets configured. Add a preset to make it appear in the timer popover.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 4)
-            } else {
-                TimerPresetListView(
-                    presets: $timerPresets,
-                    highlightProvider: highlightID,
-                    moveUp: movePresetUp,
-                    moveDown: movePresetDown,
-                    remove: removePreset
-                )
-            }
-
-            HStack {
-                Button(action: addPreset) {
-                    Label("Add Preset", systemImage: "plus")
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Button(role: .destructive, action: { showingResetConfirmation = true }) {
-                    Label("Restore Defaults", systemImage: "arrow.counterclockwise")
-                }
-                .buttonStyle(.bordered)
-                .confirmationDialog("Restore default timer presets?", isPresented: $showingResetConfirmation, titleVisibility: .visible) {
-                    Button("Restore", role: .destructive, action: resetPresets)
-                }
-            }
-        } header: {
-            Text("Timer Presets")
-        } footer: {
-            Text("Presets show up inside the timer popover with the configured name, duration, and accent colour. Reorder them to change the display order.")
-        }
-    }
-
-    @ViewBuilder
-    private var timerSoundSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Timer Sound")
-                        .font(.system(size: 16, weight: .medium))
-                    Spacer()
-                    Button("Choose File", action: selectCustomTimerSound)
-                        .buttonStyle(.bordered)
-                }
-
-                if let customTimerSoundPath = UserDefaults.standard.string(forKey: "customTimerSoundPath") {
-                    Text("Custom: \(URL(fileURLWithPath: customTimerSoundPath).lastPathComponent)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("Default: dynamic.m4a")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Button("Reset to Default") {
-                    UserDefaults.standard.removeObject(forKey: "customTimerSoundPath")
-                }
-                .buttonStyle(.bordered)
-                .disabled(UserDefaults.standard.string(forKey: "customTimerSoundPath") == nil)
-            }
-        } header: {
-            Text("Timer Sound")
-        } footer: {
-            Text("Select a custom sound to play when a timer ends. Supported formats include MP3, M4A, WAV, and AIFF.")
-        }
-    }
-
-    private var customDurationDisplay: String {
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = customTimerDuration >= 3600 ? [.hour, .minute, .second] : [.minute, .second]
-        formatter.zeroFormattingBehavior = [.pad]
-        return formatter.string(from: customTimerDuration) ?? "0:00"
-    }
-
-    private func syncCustomDuration(_ value: Double? = nil) {
-        let baseValue = value ?? customTimerDuration
-        let components = TimerPreset.components(for: baseValue)
-        customHours = components.hours
-        customMinutes = components.minutes
-        customSeconds = components.seconds
-    }
-
-    private func updateCustomDuration() {
-        let duration = TimeInterval(customHours * 3600 + customMinutes * 60 + customSeconds)
-        customTimerDuration = duration
-    }
-
-    private func addPreset() {
-        let nextIndex = timerPresets.count + 1
-        let defaultColor = Defaults[.accentColor]
-        let newPreset = TimerPreset(name: "Preset \(nextIndex)", duration: 5 * 60, color: defaultColor)
-        _ = withAnimation(.smooth) {
-            timerPresets.append(newPreset)
-        }
-    }
-
-    private func movePresetUp(_ index: Int) {
-        guard index > timerPresets.startIndex else { return }
-        _ = withAnimation(.smooth) {
-            timerPresets.swapAt(index, index - 1)
-        }
-    }
-
-    private func movePresetDown(_ index: Int) {
-        guard index < timerPresets.index(before: timerPresets.endIndex) else { return }
-        _ = withAnimation(.smooth) {
-            timerPresets.swapAt(index, index + 1)
-        }
-    }
-
-    private func removePreset(_ index: Int) {
-        guard timerPresets.indices.contains(index) else { return }
-        _ = withAnimation(.smooth) {
-            timerPresets.remove(at: index)
-        }
-    }
-
-    private func resetPresets() {
-        _ = withAnimation(.smooth) {
-            timerPresets = TimerPreset.defaultPresets
-        }
-    }
-
-    private func selectCustomTimerSound() {
-        let panel = NSOpenPanel()
-        panel.title = "Select Timer Sound"
-        panel.allowedContentTypes = [.audio]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-
-        if panel.runModal() == .OK {
-            if let url = panel.url {
-                UserDefaults.standard.set(url.path, forKey: "customTimerSoundPath")
-            }
-        }
-    }
-}
-
-private struct TimerDurationStepperRow: View {
-    let title: String
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-
-    var body: some View {
-        Stepper(value: $value, in: range) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(value)")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-            }
-        }
-    }
-}
-
-private struct TimerPresetListView: View {
-    @Binding var presets: [TimerPreset]
-    let highlightProvider: (String) -> String
-    let moveUp: (Int) -> Void
-    let moveDown: (Int) -> Void
-    let remove: (Int) -> Void
-
-    var body: some View {
-        ForEach(presets.indices, id: \.self) { index in
-            presetRow(at: index)
-        }
-    }
-
-    @ViewBuilder
-    private func presetRow(at index: Int) -> some View {
-        TimerPresetEditorRow(
-            preset: $presets[index],
-            isFirst: index == presets.startIndex,
-            isLast: index == presets.index(before: presets.endIndex),
-            highlightID: highlightID(for: index),
-            moveUp: { moveUp(index) },
-            moveDown: { moveDown(index) },
-            remove: { remove(index) }
-        )
-    }
-
-    private func highlightID(for index: Int) -> String? {
-        index == presets.startIndex ? highlightProvider("Accent colour") : nil
-    }
-}
-
-private struct TimerPresetEditorRow: View {
-    @Binding var preset: TimerPreset
-    let isFirst: Bool
-    let isLast: Bool
-    let moveUp: () -> Void
-    let moveDown: () -> Void
-    let remove: () -> Void
-    let highlightID: String?
-
-    init(
-        preset: Binding<TimerPreset>,
-        isFirst: Bool,
-        isLast: Bool,
-        highlightID: String? = nil,
-        moveUp: @escaping () -> Void,
-        moveDown: @escaping () -> Void,
-        remove: @escaping () -> Void
-    ) {
-        _preset = preset
-        self.isFirst = isFirst
-        self.isLast = isLast
-        self.highlightID = highlightID
-        self.moveUp = moveUp
-        self.moveDown = moveDown
-        self.remove = remove
-    }
-
-    private var components: TimerPreset.DurationComponents {
-        TimerPreset.components(for: preset.duration)
-    }
-
-    private var hoursBinding: Binding<Int> {
-        Binding(
-            get: { components.hours },
-            set: { updateDuration(hours: $0) }
-        )
-    }
-
-    private var minutesBinding: Binding<Int> {
-        Binding(
-            get: { components.minutes },
-            set: { updateDuration(minutes: $0) }
-        )
-    }
-
-    private var secondsBinding: Binding<Int> {
-        Binding(
-            get: { components.seconds },
-            set: { updateDuration(seconds: $0) }
-        )
-    }
-
-    private var colorBinding: Binding<Color> {
-        Binding(
-            get: { preset.color },
-            set: { preset.updateColor($0) }
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(preset.color.gradient)
-                    .frame(width: 20, height: 20)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
-
-                TextField("Preset name", text: $preset.name)
-                    .textFieldStyle(.roundedBorder)
-
-                Spacer()
-
-                Text(preset.formattedDuration)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 16) {
-                TimerPresetComponentControl(title: String(localized: "Hours"), value: hoursBinding, range: 0...23)
-                TimerPresetComponentControl(title: String(localized: "Minutes"), value: minutesBinding, range: 0...59)
-                TimerPresetComponentControl(title: String(localized: "Seconds"), value: secondsBinding, range: 0...59)
-            }
-
-            ColorPicker("Accent colour", selection: colorBinding, supportsOpacity: false)
-                .frame(maxWidth: 240, alignment: .leading)
-
-            HStack(spacing: 12) {
-                Button(action: moveUp) {
-                    Label("Move Up", systemImage: "chevron.up")
-                }
-                .buttonStyle(.bordered)
-                .disabled(isFirst)
-
-                Button(action: moveDown) {
-                    Label("Move Down", systemImage: "chevron.down")
-                }
-                .buttonStyle(.bordered)
-                .disabled(isLast)
-
-                Spacer()
-
-                Button(role: .destructive, action: remove) {
-                    Label("Delete", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
-            }
-            .font(.system(size: 12, weight: .medium))
-        }
-        .padding(.vertical, 6)
-        .settingsHighlightIfPresent(highlightID)
-    }
-
-    private func updateDuration(hours: Int? = nil, minutes: Int? = nil, seconds: Int? = nil) {
-        var values = components
-        if let hours { values.hours = hours }
-        if let minutes { values.minutes = minutes }
-        if let seconds { values.seconds = seconds }
-        preset.duration = TimerPreset.duration(from: values)
-    }
-}
-
-private struct TimerPresetComponentControl: View {
-    let title: String
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-
-    var body: some View {
-        Stepper(value: $value, in: range) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("\(value)")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-            }
-        }
-        .frame(width: 110, alignment: .leading)
-    }
-}
-
-struct StatsSettings: View {
-    @ObservedObject var statsManager = StatsManager.shared
-    @Default(.enableStatsFeature) var enableStatsFeature
-    @Default(.enableLLMUsageFeature) var enableLLMUsageFeature
-    @Default(.statsStopWhenNotchCloses) var statsStopWhenNotchCloses
-    @Default(.statsUpdateInterval) var statsUpdateInterval
-    @Default(.showCpuGraph) var showCpuGraph
-    @Default(.showMemoryGraph) var showMemoryGraph
-    @Default(.showGpuGraph) var showGpuGraph
-    @Default(.showNetworkGraph) var showNetworkGraph
-    @Default(.showDiskGraph) var showDiskGraph
-    @Default(.cpuTemperatureUnit) var cpuTemperatureUnit
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.stats.highlightID(for: title)
-    }
-
-    var enabledGraphsCount: Int {
-        [showCpuGraph, showMemoryGraph, showGpuGraph, showNetworkGraph, showDiskGraph].filter { $0 }.count
-    }
-
-    private var formattedUpdateInterval: String {
-        let seconds = Int(statsUpdateInterval.rounded())
-        if seconds >= 60 {
-            return "60 s (1 min)"
-        } else if seconds == 1 {
-            return "1 s"
-        } else {
-            return "\(seconds) s"
-        }
-    }
-
-    private var shouldShowStatsBatteryWarning: Bool {
-        !statsStopWhenNotchCloses && statsUpdateInterval <= 5
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .enableStatsFeature) {
-                    Text("Enable system stats monitoring")
-                }
-                .settingsHighlight(id: highlightID("Enable system stats monitoring"))
-                .onChange(of: enableStatsFeature) { _, newValue in
-                    if !newValue {
-                        statsManager.stopMonitoring()
-                    }
-                    // Note: Smart monitoring will handle starting when switching to stats tab
-                }
-
-                Defaults.Toggle(key: .enableLLMUsageFeature) {
-                    Text("Enable LLM Usage Monitor")
-                }
-                .settingsHighlight(id: highlightID("Enable LLM Usage Monitor"))
-
-            } header: {
-                Text("General")
-            } footer: {
-                Text("When enabled, the Stats tab will display real-time system performance graphs. This feature requires system permissions and may use additional battery. Enabling LLM Usage Monitor adds a Usage tab that tracks token usage and spend across your configured AI providers.")
-                    .multilineTextAlignment(.trailing)
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-            }
-
-            if enableLLMUsageFeature {
-                Section {
-                    Defaults.Toggle(key: .enableClaudeProvider) {
-                        Text("Claude")
-                    }
-                    .settingsHighlight(id: highlightID("Claude Provider"))
-
-                    Defaults.Toggle(key: .enableCodexProvider) {
-                        Text("Codex")
-                    }
-                    .settingsHighlight(id: highlightID("Codex Provider"))
-
-                    Defaults.Toggle(key: .enableCursorProvider) {
-                        Text("Cursor")
-                    }
-                    .settingsHighlight(id: highlightID("Cursor Provider"))
-                } header: {
-                    Text("LLM Providers")
-                } footer: {
-                    Text("Choose which AI providers appear in the Usage tab.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-            }
-
-            if enableStatsFeature {
-                Section {
-                    Defaults.Toggle(key: .statsStopWhenNotchCloses) {
-                        Text("Stop monitoring after closing the notch")
-                    }
-                    .settingsHighlight(id: highlightID("Stop monitoring after closing the notch"))
-                    .help("When enabled, stats monitoring stops a few seconds after the notch closes.")
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Update interval")
-                            Spacer()
-                            Text(formattedUpdateInterval)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Slider(value: $statsUpdateInterval, in: 1...60, step: 1)
-                            .accessibilityLabel("Stats update interval")
-
-                        Text("Controls how often system metrics refresh while monitoring is active.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if shouldShowStatsBatteryWarning {
-                        Label {
-                            Text("High-frequency updates without a timeout can increase battery usage.")
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .padding(.top, 4)
-                    }
-                } header: {
-                    Text("Monitoring Behavior")
-                } footer: {
-                    Text("Sampling can continue while the notch is closed when the timeout is disabled.")
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-
-                Section {
-                    Defaults.Toggle(key: .showCpuGraph) {
-                        Text("CPU Usage")
-                    }
-                    .settingsHighlight(id: highlightID("CPU Usage"))
-
-                    if showCpuGraph {
-                        Picker("Temperature unit", selection: $cpuTemperatureUnit) {
-                            ForEach(LockScreenWeatherTemperatureUnit.allCases) { unit in
-                                Text(unit.localizedName).tag(unit)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .settingsHighlight(id: highlightID("Temperature unit"))
-                    }
-                    Defaults.Toggle(key: .showMemoryGraph) {
-                        Text("Memory Usage")
-                    }
-                    .settingsHighlight(id: highlightID("Memory Usage"))
-                    Defaults.Toggle(key: .showGpuGraph) {
-                        Text("GPU Usage")
-                    }
-                    .settingsHighlight(id: highlightID("GPU Usage"))
-                    Defaults.Toggle(key: .showNetworkGraph) {
-                        Text("Network Activity")
-                    }
-                    .settingsHighlight(id: highlightID("Network Activity"))
-                    Defaults.Toggle(key: .showDiskGraph) {
-                        Text("Disk I/O")
-                    }
-                    .settingsHighlight(id: highlightID("Disk I/O"))
-                } header: {
-                    Text("Graph Visibility")
-                } footer: {
-                    if enabledGraphsCount >= 4 {
-                        Text("With \(enabledGraphsCount) graphs enabled, the Dynamic Island will expand horizontally to accommodate all graphs in a single row.")
-                            .multilineTextAlignment(.trailing)
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    } else {
-                        Text("Each graph can be individually enabled or disabled. Network activity shows download/upload speeds, and disk I/O shows read/write speeds.")
-                            .multilineTextAlignment(.trailing)
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Text("Monitoring Status")
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(statsManager.isMonitoring ? .green : .red)
-                                .frame(width: 8, height: 8)
-                            Text(statsManager.isMonitoring ? "Active" : "Stopped")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if statsManager.isMonitoring {
-                        if showCpuGraph {
-                            HStack {
-                                Text("CPU Usage")
-                                Spacer()
-                                Text(statsManager.cpuUsageString)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if showMemoryGraph {
-                            HStack {
-                                Text("Memory Usage")
-                                Spacer()
-                                Text(statsManager.memoryUsageString)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if showGpuGraph {
-                            HStack {
-                                Text("GPU Usage")
-                                Spacer()
-                                Text(statsManager.gpuUsageString)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if showNetworkGraph {
-                            HStack {
-                                Text("Network Download")
-                                Spacer()
-                                Text(String(format: "%.1f MB/s", statsManager.networkDownload))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            HStack {
-                                Text("Network Upload")
-                                Spacer()
-                                Text(String(format: "%.1f MB/s", statsManager.networkUpload))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if showDiskGraph {
-                            HStack {
-                                Text("Disk Read")
-                                Spacer()
-                                Text(String(format: "%.1f MB/s", statsManager.diskRead))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            HStack {
-                                Text("Disk Write")
-                                Spacer()
-                                Text(String(format: "%.1f MB/s", statsManager.diskWrite))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        HStack {
-                            Text("Last Updated")
-                            Spacer()
-                            Text(statsManager.lastUpdated, style: .relative)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("Live Performance Data")
-                }
-
-                Section {
-                    HStack {
-                        Button(statsManager.isMonitoring ? "Stop Monitoring" : "Start Monitoring") {
-                            if statsManager.isMonitoring {
-                                statsManager.stopMonitoring()
-                            } else {
-                                statsManager.startMonitoring()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .foregroundColor(statsManager.isMonitoring ? .red : .blue)
-
-                        Spacer()
-
-                        Button("Clear Data") {
-                            statsManager.clearHistory()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(statsManager.isMonitoring)
-                    }
-                } header: {
-                    Text("Controls")
-                }
-            }
-        }
-        .navigationTitle("Stats")
-    }
-}
-
-struct ClipboardSettings: View {
-    @ObservedObject var clipboardManager = ClipboardManager.shared
-    @Default(.enableClipboardManager) var enableClipboardManager
-    @Default(.clipboardHistorySize) var clipboardHistorySize
-    @Default(.showClipboardIcon) var showClipboardIcon
-    @Default(.clipboardDisplayMode) var clipboardDisplayMode
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.clipboard.highlightID(for: title)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .enableClipboardManager) {
-                    Text("Enable Clipboard Manager")
-                }
-                .settingsHighlight(id: highlightID("Enable Clipboard Manager"))
-                .onChange(of: enableClipboardManager) { _, enabled in
-                    if enabled {
-                        clipboardManager.startMonitoring()
-                    } else {
-                        clipboardManager.stopMonitoring()
-                    }
-                }
-            } header: {
-                Text("Clipboard Manager")
-            } footer: {
-                Text("Monitor clipboard changes and keep a history of recent copies. Use Cmd+Shift+V to quickly access clipboard history.")
-            }
-
-            if enableClipboardManager {
-                Section {
-                    Defaults.Toggle(key: .showClipboardIcon) {
-                        Text("Show Clipboard Icon")
-                    }
-                    .settingsHighlight(id: highlightID("Show Clipboard Icon"))
-
-                    HStack {
-                        Text("Display Mode")
-                        Spacer()
-                        Picker("", selection: $clipboardDisplayMode) {
-                            ForEach(ClipboardDisplayMode.allCases, id: \.self) { mode in
-                                Text(mode.displayName).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 100)
-                    }
-                    .settingsHighlight(id: highlightID("Display Mode"))
-
-                    HStack {
-                        Text("History Size")
-                        Spacer()
-                        Picker("", selection: $clipboardHistorySize) {
-                            Text("3 items").tag(3)
-                            Text("5 items").tag(5)
-                            Text("7 items").tag(7)
-                            Text("10 items").tag(10)
-                        }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 100)
-                    }
-                    .settingsHighlight(id: highlightID("History Size"))
-
-                    HStack {
-                        Text("Current Items")
-                        Spacer()
-                        Text("\(clipboardManager.clipboardHistory.count)")
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Text("Pinned Items")
-                        Spacer()
-                        Text("\(clipboardManager.pinnedItems.count)")
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Text("Monitoring Status")
-                        Spacer()
-                        Text(clipboardManager.isMonitoring ? "Active" : "Stopped")
-                            .foregroundColor(clipboardManager.isMonitoring ? .green : .secondary)
-                    }
-                } header: {
-                    Text("Settings")
-                } footer: {
-                    switch clipboardDisplayMode {
-                    case .popover:
-                        Text("Popover mode shows clipboard as a dropdown attached to the clipboard button.")
-                    case .panel:
-                        Text("Panel mode shows clipboard in a floating window near the notch.")
-                    case .separateTab:
-                        Text("Separate Tab mode integrates Copied Items and Notes into a single view. If both are enabled, Notes appear on the right and Clipboard on the left.")
-                    }
-                }
-
-                Section {
-                    Button("Clear Clipboard History") {
-                        clipboardManager.clearHistory()
-                    }
-                    .foregroundColor(.red)
-                    .disabled(clipboardManager.clipboardHistory.isEmpty)
-
-                    Button("Clear Pinned Items") {
-                        clipboardManager.pinnedItems.removeAll()
-                        clipboardManager.savePinnedItemsToDefaults()
-                    }
-                    .foregroundColor(.red)
-                    .disabled(clipboardManager.pinnedItems.isEmpty)
-                } header: {
-                    Text("Actions")
-                } footer: {
-                    Text("Clear clipboard history removes recent copies. Clear pinned items removes your favorites. Both actions are permanent.")
-                }
-
-                if !clipboardManager.clipboardHistory.isEmpty {
-                    Section {
-                        ForEach(clipboardManager.clipboardHistory) { item in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Image(systemName: item.type.icon)
-                                        .foregroundColor(.blue)
-                                        .frame(width: 16)
-                                    Text(item.type.displayName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text(timeAgoString(from: item.timestamp))
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                Text(item.preview)
-                                    .font(.system(.body, design: .monospaced))
-                                    .lineLimit(2)
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    } header: {
-                        Text("Current History")
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Clipboard")
-        .onAppear {
-            if enableClipboardManager && !clipboardManager.isMonitoring {
-                clipboardManager.startMonitoring()
-            }
-        }
-    }
-
-    private func timeAgoString(from date: Date) -> String {
-        let interval = Date().timeIntervalSince(date)
-
-        if interval < 60 {
-            return "Just now"
-        } else if interval < 3600 {
-            let minutes = Int(interval / 60)
-            return "\(minutes)m ago"
-        } else if interval < 86400 {
-            let hours = Int(interval / 3600)
-            return "\(hours)h ago"
-        } else {
-            let days = Int(interval / 86400)
-            return "\(days)d ago"
-        }
-    }
-}
-
-struct ScreenAssistantSettings: View {
-    @ObservedObject var screenAssistantManager = ScreenAssistantManager.shared
-    @Default(.enableScreenAssistant) var enableScreenAssistant
-    @Default(.screenAssistantDisplayMode) var screenAssistantDisplayMode
-    @Default(.geminiApiKey) var geminiApiKey
-    @State private var apiKeyText = ""
-    @State private var showingApiKey = false
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.screenAssistant.highlightID(for: title)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .enableScreenAssistant) {
-                    Text("Enable Screen Assistant")
-                }
-                .settingsHighlight(id: highlightID("Enable Screen Assistant"))
-            } header: {
-                Text("AI Assistant")
-            } footer: {
-                Text("AI-powered assistant that can analyze files, images, and provide conversational help. Use Cmd+Shift+A to quickly access the assistant.")
-            }
-
-            if enableScreenAssistant {
-                Section {
-                    HStack {
-                        Text("Gemini API Key")
-                        Spacer()
-                        if geminiApiKey.isEmpty {
-                            Text("Not Set")
-                                .foregroundColor(.red)
-                        } else {
-                            Text("••••••••")
-                                .foregroundColor(.green)
-                        }
-
-                        Button(showingApiKey ? "Hide" : (geminiApiKey.isEmpty ? "Set" : "Change")) {
-                            if showingApiKey {
-                                showingApiKey = false
-                                if !apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Defaults[.geminiApiKey] = apiKeyText
-                                }
-                                apiKeyText = ""
-                            } else {
-                                showingApiKey = true
-                                apiKeyText = geminiApiKey
-                            }
-                        }
-                    }
-
-                    if showingApiKey {
-                        VStack(alignment: .leading, spacing: 8) {
-                            SecureField("Enter your Gemini API Key", text: $apiKeyText)
-                                .textFieldStyle(.roundedBorder)
-
-                            Text("Get your free API key from Google AI Studio")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                            HStack {
-                                Button("Open Google AI Studio") {
-                                    NSWorkspace.shared.open(URL(string: "https://aistudio.google.com/app/apikey")!)
-                                }
-                                .buttonStyle(.link)
-
-                                Spacer()
-
-                                Button("Save") {
-                                    Defaults[.geminiApiKey] = apiKeyText
-                                    showingApiKey = false
-                                    apiKeyText = ""
-                                }
-                                .disabled(apiKeyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                    }
-
-                    HStack {
-                        Text("Display Mode")
-                        Spacer()
-                        Picker("", selection: $screenAssistantDisplayMode) {
-                            ForEach(ScreenAssistantDisplayMode.allCases, id: \.self) { mode in
-                                Text(mode.displayName).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 100)
-                    }
-                    .settingsHighlight(id: highlightID("Display Mode"))
-
-                    HStack {
-                        Text("Attached Files")
-                        Spacer()
-                        Text("\(screenAssistantManager.attachedFiles.count)")
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Text("Recording Status")
-                        Spacer()
-                        Text(screenAssistantManager.isRecording ? "Recording" : "Ready")
-                            .foregroundColor(screenAssistantManager.isRecording ? .red : .secondary)
-                    }
-                } header: {
-                    Text("Configuration")
-                } footer: {
-                    switch screenAssistantDisplayMode {
-                    case .popover:
-                        Text("Popover mode shows the assistant as a dropdown attached to the AI button. Panel mode shows the assistant in a floating window near the notch.")
-                    case .panel:
-                        Text("Panel mode shows the assistant in a floating window near the notch. Popover mode shows the assistant as a dropdown attached to the AI button.")
-                    }
-                }
-
-                Section {
-                    Button("Clear All Files") {
-                        screenAssistantManager.clearAllFiles()
-                    }
-                    .foregroundColor(.red)
-                    .disabled(screenAssistantManager.attachedFiles.isEmpty)
-                } header: {
-                    Text("Actions")
-                } footer: {
-                    Text("Clear all files removes all attached files and audio recordings. This action is permanent.")
-                }
-
-                if !screenAssistantManager.attachedFiles.isEmpty {
-                    Section {
-                        ForEach(screenAssistantManager.attachedFiles) { file in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Image(systemName: file.type.iconName)
-                                        .foregroundColor(.blue)
-                                        .frame(width: 16)
-                                    Text(file.type.displayName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text(timeAgoString(from: file.timestamp))
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                Text(file.name)
-                                    .font(.system(.body, design: .monospaced))
-                                    .lineLimit(2)
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    } header: {
-                        Text("Attached Files")
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Screen Assistant")
-    }
-
-    private func timeAgoString(from date: Date) -> String {
-        let interval = Date().timeIntervalSince(date)
-
-        if interval < 60 {
-            return "Just now"
-        } else if interval < 3600 {
-            let minutes = Int(interval / 60)
-            return "\(minutes)m ago"
-        } else if interval < 86400 {
-            let hours = Int(interval / 3600)
-            return "\(hours)h ago"
-        } else {
-            let days = Int(interval / 86400)
-            return "\(days)d ago"
-        }
-    }
-}
-
-struct ColorPickerSettings: View {
-    @ObservedObject var colorPickerManager = ColorPickerManager.shared
-    @Default(.enableColorPickerFeature) var enableColorPickerFeature
-    @Default(.showColorFormats) var showColorFormats
-    @Default(.colorPickerDisplayMode) var colorPickerDisplayMode
-    @Default(.colorHistorySize) var colorHistorySize
-    @Default(.showColorPickerIcon) var showColorPickerIcon
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.colorPicker.highlightID(for: title)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .enableColorPickerFeature) {
-                    Text("Enable Color Picker")
-                }
-                .settingsHighlight(id: highlightID("Enable Color Picker"))
-            } header: {
-                Text("Color Picker")
-            } footer: {
-                Text("Enable screen color picking functionality. Use Cmd+Shift+P to quickly access the color picker.")
-            }
-
-            if enableColorPickerFeature {
-                Section {
-                    Defaults.Toggle(key: .showColorPickerIcon) {
-                        Text("Show Color Picker Icon")
-                    }
-                    .settingsHighlight(id: highlightID("Show Color Picker Icon"))
-
-                    HStack {
-                        Text("Display Mode")
-                        Spacer()
-                        Picker("", selection: $colorPickerDisplayMode) {
-                            ForEach(ColorPickerDisplayMode.allCases, id: \.self) { mode in
-                                Text(mode.displayName).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 100)
-                    }
-                    .settingsHighlight(id: highlightID("Display Mode"))
-
-                    HStack {
-                        Text("History Size")
-                        Spacer()
-                        Picker("", selection: $colorHistorySize) {
-                            Text("5 colors").tag(5)
-                            Text("10 colors").tag(10)
-                            Text("15 colors").tag(15)
-                            Text("20 colors").tag(20)
-                        }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 100)
-                    }
-                    .settingsHighlight(id: highlightID("History Size"))
-
-                    Defaults.Toggle(key: .showColorFormats) {
-                        Text("Show All Color Formats")
-                    }
-                    .settingsHighlight(id: highlightID("Show All Color Formats"))
-
-                } header: {
-                    Text("Settings")
-                } footer: {
-                    switch colorPickerDisplayMode {
-                    case .popover:
-                        Text("Popover mode shows color picker as a dropdown attached to the color picker button. Panel mode shows color picker in a floating window.")
-                    case .panel:
-                        Text("Panel mode shows color picker in a floating window. Popover mode shows color picker as a dropdown attached to the color picker button.")
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Text("Color History")
-                        Spacer()
-                        Text("\(colorPickerManager.colorHistory.count)")
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Text("Picking Status")
-                        Spacer()
-                        Text(colorPickerManager.isPickingColor ? "Active" : "Ready")
-                            .foregroundColor(colorPickerManager.isPickingColor ? .green : .secondary)
-                    }
-
-                    Button("Show Color Picker Panel") {
-                        ColorPickerPanelManager.shared.showColorPickerPanel()
-                    }
-                    .disabled(!enableColorPickerFeature)
-
-                } header: {
-                    Text("Status & Actions")
-                }
-
-                Section {
-                    Button("Clear Color History") {
-                        colorPickerManager.clearHistory()
-                    }
-                    .foregroundColor(.red)
-                    .disabled(colorPickerManager.colorHistory.isEmpty)
-
-                    Button("Start Color Picking") {
-                        colorPickerManager.startColorPicking()
-                    }
-                    .disabled(!enableColorPickerFeature || colorPickerManager.isPickingColor)
-
-                } header: {
-                    Text("Quick Actions")
-                } footer: {
-                    Text("Clear color history removes all picked colors. Start color picking begins screen color capture mode.")
-                }
-            }
-        }
-        .navigationTitle("Color Picker")
     }
 }
 
@@ -8212,385 +5169,6 @@ struct SettingsPermissionCallout: View {
     HUD()
 }
 
-struct NotesSettingsView: View {
-    @EnvironmentObject var vm: DynamicIslandViewModel
-    @ObservedObject var coordinator = DynamicIslandViewCoordinator.shared
-    @ObservedObject private var appleNotesSync = AppleNotesSyncManager.shared
-    @Default(.enableNotes) private var enableNotes
-    @Default(.enableAppleNotesSync) private var enableAppleNotesSync
-    @Default(.appleNotesLastSyncDate) private var appleNotesLastSyncDate
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.notes.highlightID(for: title)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .enableNotes) {
-                    Text("Enable Notes")
-                }
-                if enableNotes {
-                    Defaults.Toggle(key: .enableNotePinning) {
-                        Text("Enable Note Pinning")
-                    }
-                    Defaults.Toggle(key: .enableNoteSearch) {
-                        Text("Enable Note Search")
-                    }
-                    Defaults.Toggle(key: .enableNoteColorFiltering) {
-                        Text("Enable Color Filtering")
-                    }
-                    Defaults.Toggle(key: .enableCreateFromClipboard) {
-                        Text("Enable Create from Clipboard")
-                    }
-                    Defaults.Toggle(key: .enableNoteCharCount) {
-                        Text("Show Character Count")
-                    }
-                }
-            } header: {
-                Text("General")
-            } footer: {
-                Text("Customize how you organize and create notes. Enabling color filtering and search helps manage large lists.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if enableNotes {
-                Section {
-                    Defaults.Toggle(key: .enableAppleNotesSync) {
-                        Text("Sync with Apple Notes")
-                    }
-                    .settingsHighlight(id: highlightID("Sync with Apple Notes"))
-
-                    if enableAppleNotesSync {
-                        Button {
-                            Task {
-                                let notes = Defaults[.savedNotes]
-                                if let merged = await appleNotesSync.sync(localNotes: notes) {
-                                    Defaults[.savedNotes] = merged
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text("Sync Now")
-                                Spacer()
-                                if appleNotesSync.isSyncing {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                }
-                            }
-                        }
-                        .disabled(appleNotesSync.isSyncing)
-                        .settingsHighlight(id: highlightID("Sync Now"))
-
-                        if let lastSync = appleNotesLastSyncDate {
-                            LabeledContent("Last synced") {
-                                Text(lastSync, style: .relative)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if let error = appleNotesSync.lastError {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                        }
-                    }
-                } header: {
-                    Text("Apple Notes")
-                } footer: {
-                    Text("Two-way sync with the macOS Notes app. Notes created in Atoll appear in the Atoll folder in Notes, and your existing Apple Notes are imported into the notch. Grant Automation permission for Notes when prompted.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .navigationTitle("Notes")
-    }
-}
-
-// MARK: - Terminal Settings
-
-struct TerminalSettings: View {
-    @ObservedObject var terminalManager = TerminalManager.shared
-    @Default(.enableTerminalFeature) var enableTerminalFeature
-    @Default(.terminalShellPath) var terminalShellPath
-    @Default(.terminalFontFamily) var terminalFontFamily
-    @Default(.terminalFontSize) var terminalFontSize
-    @Default(.terminalOpacity) var terminalOpacity
-    @Default(.terminalMaxHeightFraction) var terminalMaxHeightFraction
-    @Default(.terminalCursorStyle) var terminalCursorStyle
-    @Default(.terminalScrollbackLines) var terminalScrollbackLines
-    @Default(.terminalOptionAsMeta) var terminalOptionAsMeta
-    @Default(.terminalMouseReporting) var terminalMouseReporting
-    @Default(.terminalBoldAsBright) var terminalBoldAsBright
-    @Default(.terminalBackgroundColor) var terminalBackgroundColor
-    @Default(.terminalForegroundColor) var terminalForegroundColor
-    @Default(.terminalCursorColor) var terminalCursorColor
-
-    private func highlightID(_ title: String) -> String {
-        SettingsTab.terminal.highlightID(for: title)
-    }
-
-    private var formattedMaxHeight: String {
-        "\(Int(terminalMaxHeightFraction * 100))% of screen"
-    }
-
-    /// All monospaced font families available on the system.
-    private var monospacedFontFamilies: [String] {
-        NSFontManager.shared.availableFontFamilies.filter { family in
-            guard let font = NSFont(name: family, size: 12) else { return false }
-            return font.isFixedPitch
-                || font.fontDescriptor.symbolicTraits.contains(.monoSpace)
-        }
-        .sorted()
-    }
-
-    /// Display name for the font picker — shows "System Monospaced" when no custom font is set.
-    private var fontDisplayName: String {
-        terminalFontFamily.isEmpty ? "System Monospaced" : terminalFontFamily
-    }
-
-    private var cursorStyleBinding: Binding<TerminalCursorStyleOption> {
-        Binding(
-            get: { TerminalCursorStyleOption(rawValue: terminalCursorStyle) ?? .blinkBlock },
-            set: { terminalCursorStyle = $0.rawValue }
-        )
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .enableTerminalFeature) {
-                    Text("Enable terminal")
-                }
-                .settingsHighlight(id: highlightID("Enable terminal"))
-
-                if enableTerminalFeature {
-                    Defaults.Toggle(key: .terminalStickyMode) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Keep terminal open until clicked outside")
-                            Text("Prevents the terminal from closing when the cursor accidentally leaves the notch area.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .settingsHighlight(id: highlightID("Keep terminal open"))
-                }
-            } header: {
-                Text("General")
-            } footer: {
-                Text("Adds a Guake-style dropdown terminal tab. The terminal session persists across notch open/close cycles.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if enableTerminalFeature {
-                // MARK: Shell
-                Section {
-                    HStack {
-                        Text("Shell path")
-                        Spacer()
-                        TextField("", text: $terminalShellPath)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 200)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    .settingsHighlight(id: highlightID("Shell path"))
-                } header: {
-                    Text("Shell")
-                }
-
-                // MARK: Appearance
-                Section {
-                    Picker("Font family", selection: $terminalFontFamily) {
-                        Text("System Monospaced").tag("")
-                        Divider()
-                        ForEach(monospacedFontFamilies, id: \.self) { family in
-                            Text(family)
-                                .font(.custom(family, size: 13))
-                                .tag(family)
-                        }
-                    }
-                    .onChange(of: terminalFontFamily) { _, newValue in
-                        terminalManager.applyFontFamily(newValue)
-                    }
-                    .settingsHighlight(id: highlightID("Font family"))
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Font size")
-                            Spacer()
-                            Text("\(Int(terminalFontSize)) pt")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        Slider(value: $terminalFontSize, in: 8...24, step: 1)
-                            .onChange(of: terminalFontSize) { _, newValue in
-                                terminalManager.applyFontSize(newValue)
-                            }
-                    }
-                    .settingsHighlight(id: highlightID("Font size"))
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Terminal opacity")
-                            Spacer()
-                            Text("\(Int(terminalOpacity * 100))%")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        Slider(value: $terminalOpacity, in: 0.3...1.0, step: 0.05)
-                            .onChange(of: terminalOpacity) { _, newValue in
-                                terminalManager.applyOpacity(newValue)
-                            }
-                    }
-                    .settingsHighlight(id: highlightID("Terminal opacity"))
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Maximum height")
-                            Spacer()
-                            Text(formattedMaxHeight)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        Slider(value: $terminalMaxHeightFraction, in: 0.2...0.5, step: 0.05)
-                    }
-                    .settingsHighlight(id: highlightID("Maximum height"))
-                } header: {
-                    Text("Appearance")
-                } footer: {
-                    Text("Terminal opacity only affects the terminal backdrop; text stays fully opaque. Blur uses the system material behind the window.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // MARK: Colors
-                Section {
-                    ColorPicker("Background", selection: $terminalBackgroundColor, supportsOpacity: false)
-                        .onChange(of: terminalBackgroundColor) { _, newValue in
-                            terminalManager.applyBackgroundColor(newValue)
-                        }
-                        .settingsHighlight(id: highlightID("Background color"))
-
-                    ColorPicker("Foreground", selection: $terminalForegroundColor, supportsOpacity: false)
-                        .onChange(of: terminalForegroundColor) { _, newValue in
-                            terminalManager.applyForegroundColor(newValue)
-                        }
-                        .settingsHighlight(id: highlightID("Foreground color"))
-
-                    ColorPicker("Cursor", selection: $terminalCursorColor, supportsOpacity: false)
-                        .onChange(of: terminalCursorColor) { _, newValue in
-                            terminalManager.applyCursorColor(newValue)
-                        }
-                        .settingsHighlight(id: highlightID("Cursor color"))
-
-                    Toggle("Bold text as bright colors", isOn: $terminalBoldAsBright)
-                        .onChange(of: terminalBoldAsBright) { _, newValue in
-                            terminalManager.applyBoldAsBright(newValue)
-                        }
-                        .settingsHighlight(id: highlightID("Bold as bright"))
-                } header: {
-                    Text("Colors")
-                } footer: {
-                    Text("When bold-as-bright is off, bold text uses a heavier font weight instead of bright ANSI colors.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // MARK: Cursor
-                Section {
-                    Picker("Cursor style", selection: cursorStyleBinding) {
-                        ForEach(TerminalCursorStyleOption.allCases, id: \.self) { style in
-                            Text(style.displayName).tag(style)
-                        }
-                    }
-                    .onChange(of: terminalCursorStyle) { _, newValue in
-                        if let style = TerminalCursorStyleOption(rawValue: newValue) {
-                            terminalManager.applyCursorStyle(style)
-                        }
-                    }
-                    .settingsHighlight(id: highlightID("Cursor style"))
-                } header: {
-                    Text("Cursor")
-                }
-
-                // MARK: Scrollback
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Scrollback lines")
-                            Spacer()
-                            Text("\(terminalScrollbackLines)")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        Slider(
-                            value: Binding(
-                                get: { Double(terminalScrollbackLines) },
-                                set: { terminalScrollbackLines = Int($0) }
-                            ),
-                            in: 100...10000,
-                            step: 100
-                        )
-                        .onChange(of: terminalScrollbackLines) { _, newValue in
-                            terminalManager.applyScrollback(newValue)
-                        }
-                    }
-                    .settingsHighlight(id: highlightID("Scrollback lines"))
-                } header: {
-                    Text("Scrollback")
-                } footer: {
-                    Text("Number of lines kept in the scrollback buffer. Higher values use more memory.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // MARK: Input
-                Section {
-                    Toggle("Option as Meta key", isOn: $terminalOptionAsMeta)
-                        .onChange(of: terminalOptionAsMeta) { _, newValue in
-                            terminalManager.applyOptionAsMeta(newValue)
-                        }
-                        .settingsHighlight(id: highlightID("Option as Meta"))
-
-                    Toggle("Allow mouse reporting", isOn: $terminalMouseReporting)
-                        .onChange(of: terminalMouseReporting) { _, newValue in
-                            terminalManager.applyMouseReporting(newValue)
-                        }
-                        .settingsHighlight(id: highlightID("Mouse reporting"))
-                } header: {
-                    Text("Input")
-                } footer: {
-                    Text("Option as Meta sends Esc+key instead of macOS special characters. Mouse reporting forwards mouse events to terminal applications like vim or tmux.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // MARK: Actions
-                Section {
-                    Button("Restart Shell") {
-                        terminalManager.restartShell()
-                    }
-                    .disabled(!terminalManager.isProcessRunning)
-                } header: {
-                    Text("Actions")
-                } footer: {
-                    Text("Restarts the shell process. Any unsaved work in the terminal will be lost.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .navigationTitle("Terminal")
-    }
-}
-
-// MARK: - Reusable App Icon View
-
-/// Fetches the real app icon from the system using bundle identifiers,
-/// falling back to an asset catalog image or an SF Symbol.
 struct AppIconImage: View {
     let bundleIdentifiers: [String]
     var assetFallback: String? = nil

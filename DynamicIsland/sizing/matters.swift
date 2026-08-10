@@ -63,32 +63,12 @@ func enabledStandardTabCount() -> Int {
     var count = 0
 
     // Home tab
-    if Defaults[.showStandardMediaControls] || Defaults[.showCalendar] || Defaults[.showMirror] {
+    if Defaults[.showStandardMediaControls] || Defaults[.showMirror] {
         count += 1
     }
 
     // Shelf tab
     if Defaults[.dynamicShelf] {
-        count += 1
-    }
-
-    // Timer tab (only in .tab display mode)
-    if Defaults[.enableTimerFeature] && Defaults[.timerDisplayMode] == .tab {
-        count += 1
-    }
-
-    // Stats tab
-    if Defaults[.enableStatsFeature] {
-        count += 1
-    }
-
-    // Notes / Clipboard tab
-    if Defaults[.enableNotes] || (Defaults[.enableClipboardManager] && Defaults[.clipboardDisplayMode] == .separateTab) {
-        count += 1
-    }
-
-    // Terminal tab
-    if Defaults[.enableTerminalFeature] {
         count += 1
     }
 
@@ -123,11 +103,6 @@ func enforceMinimumNotchWidth() {
 }
 private let minimalisticBaseOpenNotchSize: CGSize = .init(width: 420, height: 180)
 private let minimalisticLyricsExtraHeight: CGFloat = 40
-let minimalisticTimerCountdownTopPadding: CGFloat = 12
-let minimalisticTimerCountdownContentHeight: CGFloat = 82
-let minimalisticTimerCountdownBlockHeight: CGFloat = minimalisticTimerCountdownTopPadding + minimalisticTimerCountdownContentHeight
-let statsSecondRowContentHeight: CGFloat = 120
-let statsGridSpacingHeight: CGFloat = 12
 let notchShadowPaddingStandard: CGFloat = 18
 let notchShadowPaddingMinimalistic: CGFloat = 12
 
@@ -144,96 +119,10 @@ func minimalisticOpenNotchSize(isDynamicIslandMode: Bool) -> CGSize {
         size.height += minimalisticLyricsExtraHeight
     }
     
-    let reminderCount = ReminderLiveActivityManager.shared.activeWindowReminders.count
-    if reminderCount > 0 {
-        let reminderHeight = ReminderLiveActivityManager.additionalHeight(forRowCount: reminderCount)
-        size.height += reminderHeight
-    }
-
-    if DynamicIslandViewCoordinator.shared.timerLiveActivityEnabled && TimerManager.shared.isExternalTimerActive {
-        size.height += minimalisticTimerCountdownBlockHeight
-    }
-
     return size
 }
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 let minimalisticCornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 35, bottom: 35), closed: cornerRadiusInsets.closed)
-
-// MARK: - Terminal tab clip (notch surface)
-
-/// Padding on the terminal block inside the notch. Inner corner radius = outer shell radius on that edge, minus the matching edge padding.
-let notchTerminalContentEdgePadding: (top: CGFloat, horizontal: CGFloat, bottom: CGFloat) = (4, 8, 8)
-
-/// Inner margin (all edges) between the SwiftTerm view's glyphs and the terminal block edge.
-/// Applied to the LocalProcessTerminalView frame only; the frosted blur underlay stays full-bleed.
-let notchTerminalInnerTextInset: CGFloat = 6
-
-/// Bottom radii for the shell (outer) and the terminal ``clipShape`` (inner), per design: inner = outer shell bottom radius − `notchTerminalContentEdgePadding.bottom`.
-func notchTerminalBottomCornerRadii(
-    isDynamicIslandMode: Bool,
-    notchState: NotchState,
-    cornerRadiusScaling: Bool,
-    enableMinimalisticUI: Bool,
-    closedNotchHeight: CGFloat
-) -> (outerBottom: CGFloat, innerBottom: CGFloat) {
-    let p = notchTerminalContentEdgePadding.bottom
-    if isDynamicIslandMode {
-        let outer: CGFloat
-        if notchState == .open {
-            outer = enableMinimalisticUI
-                ? minimalisticCornerRadiusInsets.opened.top
-                : dynamicIslandPillCornerRadiusInsets.opened
-        } else {
-            outer = max(closedNotchHeight / 2, dynamicIslandPillCornerRadiusInsets.closed.standard)
-        }
-        return (outer, max(0, outer - p))
-    }
-    let active: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = {
-        if enableMinimalisticUI {
-            return (opened: minimalisticCornerRadiusInsets.opened, closed: cornerRadiusInsets.closed)
-        }
-        return cornerRadiusInsets
-    }()
-    let outerBottom: CGFloat
-    if notchState == .open && cornerRadiusScaling {
-        outerBottom = active.opened.bottom
-    } else {
-        outerBottom = active.closed.bottom
-    }
-    return (outerBottom, max(0, outerBottom - p))
-}
-
-func statsAdjustedNotchSize(
-    from baseSize: CGSize,
-    isStatsTabActive: Bool,
-    secondRowProgress: CGFloat
-) -> CGSize {
-    guard isStatsTabActive, Defaults[.enableStatsFeature] else {
-        return baseSize
-    }
-
-    let enabledGraphsCount = [
-        Defaults[.showCpuGraph],
-        Defaults[.showMemoryGraph],
-        Defaults[.showGpuGraph],
-        Defaults[.showNetworkGraph],
-        Defaults[.showDiskGraph]
-    ].filter { $0 }.count
-
-    guard enabledGraphsCount >= 4 else {
-        return baseSize
-    }
-
-    let clampedProgress = max(0, min(secondRowProgress, 1))
-    guard clampedProgress > 0 else {
-        return baseSize
-    }
-
-    var adjustedSize = baseSize
-    let extraHeight = (statsSecondRowContentHeight + statsGridSpacingHeight) * clampedProgress
-    adjustedSize.height += extraHeight
-    return adjustedSize
-}
 
 func notchShadowPaddingValue(isMinimalistic: Bool) -> CGFloat {
     isMinimalistic ? notchShadowPaddingMinimalistic : notchShadowPaddingStandard
