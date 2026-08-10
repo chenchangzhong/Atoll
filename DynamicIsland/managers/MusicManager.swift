@@ -646,6 +646,13 @@ class MusicManager: ObservableObject {
         activeController = nil
     }
 
+    /// Terminate the active controller's adapter subprocess. Called from
+    /// applicationWillTerminate — deinit is not guaranteed to run on app exit,
+    /// which would otherwise orphan the mediaremote-adapter.pl process.
+    func terminateAdapterProcess() {
+        activeController?.terminateAdapterProcess()
+    }
+
     // MARK: - Setup Methods
     private func createController(for type: MediaControllerType) -> (any MediaControllerProtocol)? {
         // Cleanup previous controller

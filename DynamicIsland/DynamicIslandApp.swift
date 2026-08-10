@@ -238,6 +238,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Stop AudioTap capture
         AudioTap.shared.stopCapture()
 
+        // Terminate the mediaremote-adapter.pl subprocess — deinit does not run
+        // when the app process exits, so without this the adapter is orphaned
+        // and keeps accumulating across launches.
+        MusicManager.shared.terminateAdapterProcess()
+
         // Restore Lunar's native OSD if integration was active
         LunarManager.shared.appWillTerminate()
     }

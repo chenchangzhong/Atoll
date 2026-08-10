@@ -37,4 +37,12 @@ protocol MediaControllerProtocol: ObservableObject {
     func toggleRepeat() async
     func isActive() -> Bool
     func updatePlaybackInfo() async
+    /// Stop any background helper process (e.g. the mediaremote-adapter.pl stream).
+    /// Called from applicationWillTerminate — deinit is not guaranteed to run
+    /// when the app process exits, which would otherwise orphan the subprocess.
+    func terminateAdapterProcess()
+}
+
+extension MediaControllerProtocol {
+    func terminateAdapterProcess() {}
 }

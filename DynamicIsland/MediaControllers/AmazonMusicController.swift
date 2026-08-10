@@ -49,6 +49,7 @@ class FilteredNowPlayingController: ObservableObject, MediaControllerProtocol {
     private var process: Process?
     private var pipeHandler: JSONLinesPipeHandler?
     private var streamTask: Task<Void, Never>?
+    private var setupTask: Task<Void, Never>?
     private let targetBundleIdentifier: String
     private let controllerName: String
 
@@ -84,25 +85,39 @@ class FilteredNowPlayingController: ObservableObject, MediaControllerProtocol {
         MRMediaRemoteSetRepeatModeFunction = unsafeBitCast(
             MRMediaRemoteSetRepeatModePointer, to: (@convention(c) (Int) -> Void).self)
 
-        Task { await setupNowPlayingObserver() }
+        setupTask = Task { await setupNowPlayingObserver() }
     }
 
     deinit {
         streamTask?.cancel()
+        setupTask?.cancel()
 
         if let pipeHandler = self.pipeHandler {
             Task { await pipeHandler.close() }
         }
 
-        if let process = self.process {
-            if process.isRunning {
-                process.terminate()
-                process.waitUntilExit()
-            }
-        }
+        stopAdapterProcess()
 
         self.process = nil
         self.pipeHandler = nil
+    }
+
+    func terminateAdapterProcess() {
+        setupTask?.cancel()
+        stopAdapterProcess()
+    }
+
+    private func stopAdapterProcess() {
+        guard let process = self.process, process.isRunning else { return }
+        process.terminate()
+        // Fallback: if the adapter ignores SIGTERM, force-kill after a short
+        // grace period so applicationWillTerminate never blocks the main
+        // thread indefinitely waiting for it.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak process] in
+            guard let process, process.isRunning else { return }
+            kill(process.processIdentifier, SIGKILL)
+        }
+        process.waitUntilExit()
     }
 
     func play() async {
@@ -181,6 +196,7 @@ class FilteredNowPlayingController: ObservableObject, MediaControllerProtocol {
         self.process = process
         self.pipeHandler = pipeHandler
 
+        guard !Task.isCancelled else { return }
         do {
             try process.run()
             streamTask = Task { [weak self] in
