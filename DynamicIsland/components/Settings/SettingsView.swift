@@ -2501,25 +2501,11 @@ struct Media: View {
                 }
                 .settingsHighlight(id: highlightID("Music Source"))
             } header: {
-                Text("Media Source")
+                Text("Music Source")
             } footer: {
-                if MusicManager.shared.isNowPlayingDeprecated {
-                    HStack {
-                        Text("YouTube Music requires this third-party app to be installed: ")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                        Link("https://github.com/th-ch/youtube-music", destination: URL(string: "https://github.com/th-ch/youtube-music")!)
-                            .font(.caption)
-                            .foregroundColor(.blue) // Ensures it's visibly a link
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(String(localized: "'Now Playing' was the only option on previous versions and works with all media apps."))
-                        Text(String(localized: "Uses macOS Now Playing when the Amazon Music app is the active media source. Playback controls follow the system Now Playing target. Scrubbing the timeline may not work if the Amazon Music app does not support remote seek."))
-                    }
+                Text(String(localized: "Playback info and controls for QQ Music follow the macOS Now Playing target. Scrubbing the timeline may not work if the QQ Music app does not support remote seek."))
                     .foregroundStyle(.secondary)
                     .font(.caption)
-                }
             }
 
             if mediaController == .spotify {
@@ -2782,11 +2768,7 @@ struct Media: View {
 
     // Only show controller options that are available on this macOS version
     private var availableMediaControllers: [MediaControllerType] {
-        if MusicManager.shared.isNowPlayingDeprecated {
-            return MediaControllerType.allCases.filter { $0 != .nowPlaying }
-        } else {
-            return MediaControllerType.allCases
-        }
+        Defaults.Keys.selectableMediaControllers
     }
 
     private var unavailableBlurRow: some View {

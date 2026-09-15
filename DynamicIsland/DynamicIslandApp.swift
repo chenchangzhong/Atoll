@@ -551,6 +551,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Migrate legacy progress bar settings
         Defaults.Keys.migrateProgressBarStyle()
+        Defaults.Keys.migrateMediaControllerSelection()
         Defaults.Keys.migrateMusicAuxControls()
         Defaults.Keys.migrateMusicControlSlots()
         Defaults.Keys.migrateCapsLockTintMode()

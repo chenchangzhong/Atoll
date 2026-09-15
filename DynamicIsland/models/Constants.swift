@@ -180,7 +180,8 @@ enum MediaControllerType: String, CaseIterable, Identifiable, Defaults.Serializa
     case youtubeMusic = "Youtube Music"
     case amazonMusic = "Amazon Music"
     case cider = "Cider"
-    
+    case qqMusic = "QQ Music"
+
     var id: String { self.rawValue }
     
     var localizedName: String {
@@ -191,6 +192,7 @@ enum MediaControllerType: String, CaseIterable, Identifiable, Defaults.Serializa
         case .youtubeMusic: return String(localized: "Youtube Music")
         case .amazonMusic: return String(localized: "Amazon Music")
         case .cider: return String(localized: "Cider")
+        case .qqMusic: return String(localized: "QQ Music")
         }
     }
 }
@@ -674,10 +676,15 @@ extension Defaults.Keys {
     
     // Helper to determine the default media controller based on macOS version
     static var defaultMediaController: MediaControllerType {
-        if #available(macOS 15.4, *) {
-            return .appleMusic
-        } else {
-            return .nowPlaying
+        return .appleMusic
+    }
+
+    // Keep the saved mediaController selection on the list of selectable sources.
+    static let selectableMediaControllers: [MediaControllerType] = [.appleMusic, .qqMusic]
+
+    static func migrateMediaControllerSelection() {
+        if !selectableMediaControllers.contains(Defaults[.mediaController]) {
+            Defaults[.mediaController] = .appleMusic
         }
     }
     

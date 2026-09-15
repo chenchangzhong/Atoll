@@ -30,11 +30,7 @@ struct MusicControllerSelectionView: View {
     @Default(.mediaController) var mediaController
     
     private var availableMediaControllers: [MediaControllerType] {
-        if MusicManager.shared.isNowPlayingDeprecated {
-            return MediaControllerType.allCases.filter { $0 != .nowPlaying }
-        } else {
-            return MediaControllerType.allCases
-        }
+        Defaults.Keys.selectableMediaControllers
     }
     
     @State private var selectedMediaController: MediaControllerType = Defaults[.mediaController]
@@ -147,6 +143,8 @@ extension MediaControllerType {
             return String(localized: "Uses macOS Now Playing when the Amazon Music app is the active media source. Playback controls follow the system Now Playing target. Scrubbing the timeline may not work if the Amazon Music app does not support remote seek.")
         case .cider:
             return String(localized: "Uses macOS Now Playing when Cider is the active media source. Playback controls follow the system Now Playing target.")
+        case .qqMusic:
+            return String(localized: "Uses macOS Now Playing when QQ Music is the active media source. Playback controls follow the system Now Playing target.")
         }
     }
 }

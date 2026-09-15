@@ -329,3 +329,14 @@ final class CiderController: FilteredNowPlayingController {
         )
     }
 }
+
+final class QQMusicController: FilteredNowPlayingController {
+    static let bundleIdentifier = "com.tencent.QQMusicMac"
+
+    init?() {
+        super.init(
+            bundleIdentifier: Self.bundleIdentifier,
+            controllerName: "QQMusicController"
+        )
+    }
+}
