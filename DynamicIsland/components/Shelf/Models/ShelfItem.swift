@@ -206,13 +206,20 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
 
     func cleanupStoredData() {
         // Only resolve bookmark for temporary items - persisted items don't need cleanup
-        guard isTemporary, case let .file(bookmark) = kind,
-              let context = resolvedContextSync(for: bookmark) else { return }
-        
-        let url = context.url
-        
-        // Handle temporary files
-        TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: url)
+        guard isTemporary, case let .file(bookmark) = kind else { return }
+        // a4f2fix: serve from cache when available (always for temp items created this session);
+        // on a cache miss resolve in the background without blocking the caller.
+        if let path = Bookmark.cachedPath(for: bookmark) {
+            TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: Foundation.URL(fileURLWithPath: path))
+            return
+        }
+        Task.detached { [bookmarkData = bookmark] in
+            let bookmarkObj = Bookmark(data: bookmarkData)
+            let result = await bookmarkObj.resolveAsync()
+            if let url = result.url {
+                TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: url)
+            }
+        }
     }
 }
 
@@ -253,10 +260,13 @@ extension ShelfItem {
     var identityKey: String {
         switch kind {
         case .file(let bookmark):
-            if let url = resolvedContextSync(for: bookmark)?.url {
-                return "file://" + url.standardizedFileURL.path
+            // a4f2fix: serve from the Bookmark process cache; never block the caller thread.
+            // Unresolved bookmarks (e.g. items loaded from disk before their first resolution)
+            // keep a stable inactive key so dedup remains cheap.
+            if let path = Bookmark.cachedPath(for: bookmark) {
+                return "file://" + path
             }
-            return "file://missing/" + bookmark.base64EncodedString()
+            return "file://unresolved/" + bookmark.base64EncodedString()
         case .link(let u):
             return "link://" + u.absoluteString
         case .text(let s):
@@ -279,25 +289,3 @@ private extension ShelfItemKind {
     }
 }
 
-private extension ShelfItem {
-    func resolvedContext(for bookmarkData: Data) async -> (url: URL, bookmark: Data)? {
-        let bookmark = Bookmark(data: bookmarkData)
-        let result = await bookmark.resolveAsync()
-        if let url = result.url {
-            return (url, result.refreshedData ?? bookmarkData)
-        }
-        return nil
-    }
-
-    // Sync wrapper for backward compatibility
-    func resolvedContextSync(for bookmarkData: Data) -> (url: URL, bookmark: Data)? {
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: (url: URL, bookmark: Data)?
-        Task.detached {
-            result = await resolvedContext(for: bookmarkData)
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 5.0)
-        return result
-    }
-}

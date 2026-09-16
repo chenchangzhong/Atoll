@@ -63,14 +63,14 @@ final class ShelfItemViewModel: ObservableObject {
         let name = await loadDisplayNameFromURL(resolvedURL)
         await MainActor.run { self.displayName = name }
         
-        // Load icon
+        // Load icon (system file icon; Quick Look preview is only generated for images,
+        // see ImagePreviewService guardrails)
         let image = await loadIconFromURL(resolvedURL)
         await MainActor.run { self.icon = image }
-        
-        // Load thumbnail
-        if let thumbnailImage = await ThumbnailService.shared.thumbnail(for: resolvedURL, size: CGSize(width: 56, height: 56)) {
-            await MainActor.run { self.thumbnail = thumbnailImage }
-        }
+
+        // a4f2img: generate Quick Look preview only for images (size/timeout-gated)
+        let preview = await ImagePreviewService.shared.thumbnail(for: resolvedURL)
+        await MainActor.run { self.thumbnail = preview }
     }
 
     func loadDisplayName() async {
@@ -122,6 +122,10 @@ final class ShelfItemViewModel: ObservableObject {
         guard let resolvedURL = url else { return }
         let image = await loadIconFromURL(resolvedURL)
         await MainActor.run { self.icon = image }
+
+        // a4f2img: keep the image-only preview generation consistent across reloads
+        let preview = await ImagePreviewService.shared.thumbnail(for: resolvedURL)
+        await MainActor.run { self.thumbnail = preview }
     }
 
     private func loadIconFromURL(_ url: URL) async -> NSImage {

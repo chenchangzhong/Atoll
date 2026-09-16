@@ -11,6 +11,8 @@
 	<string>Atoll uses Apple Music to fetch animated artwork for the lock screen wallpaper.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Atoll needs audio capture permission to display the real-time music waveform visualizer.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Atoll needs Bluetooth access to detect when audio devices connect and display their battery status in the HUD.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Atoll needs screen recording permission to detect when recording is active and show the privacy indicator.</string>
 	<key>UTImportedTypeDeclarations</key>

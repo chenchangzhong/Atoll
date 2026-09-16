@@ -26,6 +26,22 @@ import AppKit
 struct Bookmark: Sendable, Equatable, Codable {
     let data: Data
 
+    // a4f2fix: process-wide cache of bookmarkData -> standardized path. Filled on creation
+    // and on every resolution so identityKey/dedup never needs a synchronous XPC round-trip.
+    private static let resolvedPathCacheLock = NSLock()
+    private static var resolvedPathCache: [Data: String] = [:]
+
+    static func cachedPath(for data: Data) -> String? {
+        resolvedPathCacheLock.lock(); defer { resolvedPathCacheLock.unlock() }
+        return resolvedPathCache[data]
+    }
+
+    private static func recordPath(_ path: String?, for data: Data) {
+        guard let path else { return }
+        resolvedPathCacheLock.lock(); defer { resolvedPathCacheLock.unlock() }
+        resolvedPathCache[data] = path
+    }
+
     init(data: Data) {
         self.data = data
     }
@@ -40,8 +56,9 @@ struct Bookmark: Sendable, Equatable, Codable {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            NSLog("✅ Successfully created bookmark for \(url.path)")
+            Self.recordPath(url.standardizedFileURL.path, for: bookmark)
             self.data = bookmark
+            NSLog("✅ Successfully created bookmark for \(url.path)")
         } catch {
             NSLog("❌ Failed to create bookmark for \(url.path): \(error.localizedDescription)")
             throw error
@@ -59,6 +76,7 @@ struct Bookmark: Sendable, Equatable, Codable {
                     relativeTo: nil,
                     bookmarkDataIsStale: &isStale
                 )
+                Self.recordPath(url.standardizedFileURL.path, for: data)
                 if isStale, let newData = try? url.bookmarkData(options: [.withSecurityScope]) {
                     NSLog("⚠️ Bookmark was stale for \(url.path), refreshed")
                     return (url, newData)
@@ -85,6 +103,7 @@ struct Bookmark: Sendable, Equatable, Codable {
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
+            Self.recordPath(url.standardizedFileURL.path, for: data)
             if isStale, let newData = try? url.bookmarkData(options: [.withSecurityScope]) {
                 NSLog("⚠️ Bookmark was stale for \(url.path), refreshed")
                 return (url, newData)
