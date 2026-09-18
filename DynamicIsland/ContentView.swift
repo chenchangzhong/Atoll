@@ -48,6 +48,7 @@ struct ContentView: View {
     @ObservedObject var capsLockManager = CapsLockManager.shared
     @ObservedObject var localSendService = LocalSendService.shared
     @ObservedObject var localSendReceiveService = LocalSendReceiveService.shared
+    @State private var localSendReceiveSuppressionToken = UUID()
     @State private var downloadManager = DownloadManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
     
@@ -888,11 +889,16 @@ struct ContentView: View {
               }
               .onChange(of: localSendReceiveService.pendingRequest) { _, request in
                   // The user chose to be told about incoming files, so open the
-                  // notch rather than waiting for a hover.
+                  // notch rather than waiting for a hover — and keep it open
+                  // until the decision is made, or moving the mouse away would
+                  // hide the prompt while the sender is still waiting.
                   if request != nil {
+                      vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
                       withAnimation(.smooth(duration: 0.3)) {
                           vm.open()
                       }
+                  } else {
+                      vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
                   }
               }
               .zIndex(1)

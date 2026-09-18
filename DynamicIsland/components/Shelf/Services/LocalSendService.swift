@@ -947,6 +947,12 @@ final class LocalSendService: NSObject, ObservableObject {
                     Task { @MainActor [weak self] in
                         Logger.log("LocalSend register listener failed: \(error.localizedDescription)", category: .extensions)
                         self?.registerListener = nil
+                        // The pinned receive server must come back on its own: a
+                        // taken port at launch used to leave it dead until the
+                        // user opened the picker.
+                        try? await Task.sleep(nanoseconds: 10_000_000_000)
+                        guard let self, self.receivePinned else { return }
+                        self.startRegisterListenerIfNeeded()
                     }
                 }
             }

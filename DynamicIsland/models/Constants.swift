@@ -529,7 +529,8 @@ extension Defaults.Keys {
     
         // MARK: Shelf
     static let dynamicShelf = Key<Bool>("dynamicShelf", default: true)
-    /// Ask before storing files pushed in by LocalSend peers (the notch card).
+    /// When false (the default) Atoll asks in the notch before storing files
+    /// pushed in by LocalSend peers; when true it stores them straight away.
     static let localSendAutoAcceptIncoming = Key<Bool>("localSendAutoAcceptIncoming", default: false)
     static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
         static let quickShareProvider = Key<String>("quickShareProvider", default: "AirDrop")
