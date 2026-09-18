@@ -206,6 +206,10 @@ final class LocalSendService: NSObject, ObservableObject {
     }
 
     nonisolated private func stopMulticastSockets() {
+        // Any teardown invalidates a running receive loop, so bump here as well
+        // as on start: the loop's poll() is not woken by close() and would
+        // otherwise keep polling a closed (possibly recycled) descriptor.
+        multicastGeneration &+= 1
         if multicastRecvSocket >= 0 {
             close(multicastRecvSocket)
             multicastRecvSocket = -1
@@ -228,7 +232,7 @@ final class LocalSendService: NSObject, ObservableObject {
         receiveLoopTask = Task.detached(priority: .utility) { [weak self] in
             var buffer = [UInt8](repeating: 0, count: 65_536)
             var source = sockaddr_in()
-            while !Task.isCancelled, self?.multicastGeneration == generation {
+            while !Task.isCancelled, self?.multicastGeneration == generation, self?.multicastRecvSocket == fd {
                 // Block in poll() with a timeout instead of re-calling recvfrom
                 // every 20 ms: one syscall per wakeup. Note that closing the
                 // socket does NOT wake poll() on macOS, so teardown latency is
