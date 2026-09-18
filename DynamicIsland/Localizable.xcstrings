@@ -44719,6 +44719,680 @@
           }
         }
       }
+    },
+    "🔋 Max capacity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔋 Maximale Kapazität"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔋 Maximale capaciteit"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔋 Макс. емкость"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔋 ความจุสูงสุด"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔋 最大容量"
+          }
+        }
+      }
+    },
+    "🕒 Time to full charge:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🕒 Zeit bis zur vollständigen Aufladung:"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🕒 Tijd tot volledig opladen:"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🕒 Время до полной зарядки:"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🕒 เวลาชาร์จเต็ม:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🕒 充满所需时间："
+          }
+        }
+      }
+    },
+    "Camera is being used by an application": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kamera wird von einer Anwendung verwendet."
+          }
+        },
+        "gu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "એપ્લિકેશન દ્વારા કેમેરાનો ઉપયોગ થઈ રહ્યો છે"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera wordt gebruikt door een applicatie"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера используется приложением"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กล้องกำลังถูกใช้โดยแอปพลิเคชัน"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相机正被某个应用使用"
+          }
+        }
+      }
+    },
+    "Enable Custom OSD": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzerdefiniertes OSD aktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Enable Custom OSD"
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer l'OSD personnalisé"
+          }
+        },
+        "gu": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aangepaste OSD inschakelen"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить Собственный OSD"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เปิดใช้ OSD กำหนดเอง"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用自定义 OSD"
+          }
+        }
+      }
+    },
+    "Enable media ": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medien aktivieren"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media inschakelen"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить медиа "
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เปิดใช้สื่อ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用媒体 "
+          }
+        }
+      }
+    },
+    "Failed to read crash reports:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler beim Lesen der Absturzberichte:"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kan crashrapporten niet lezen:"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать отчеты о сбоях:"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "อ่านรายงานข้อขัดข้องล้มเหลว:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取崩溃报告失败："
+          }
+        }
+      }
+    },
+    "Microphone is being used by an application": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Mikrofon wird von einer Anwendung verwendet."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microfoon wordt gebruikt door een applicatie"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Микрофон используется приложением"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไมโครโฟนกำลังถูกใช้โดยแอปพลิเคชัน"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风正被某个应用使用"
+          }
+        }
+      }
+    },
+    "Quick Presets": {
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnelle Voreinstellungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Quick Presets"
+          }
+        },
+        "en-GB": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préréglages rapides"
+          }
+        },
+        "gu": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snelle voorinstellingen"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Быстрые пресеты"
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "ta": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "พรีเซ็ตด่วน"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "new",
+            "value": ""
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快捷预设"
+          }
+        }
+      }
+    },
+    "Screen Padding: %@px": {
+      "localizations": {
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schermopvulling: %@px"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отступы экрана: %@ px"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen Padding: %@px"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕边距：%@像素"
+          }
+        }
+      }
+    },
+    "Single Indicators": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einzelindikatoren"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enkele indicatoren"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одиночные индикаторы"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตัวบ่งชี้เดี่ยว"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "单个指示器"
+          }
+        }
+      }
+    },
+    "When disabled, all keyboard shortcuts will be inactive. You can still use the UI controls": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn diese Option deaktiviert ist, sind alle Tastaturkürzel inaktiv. Sie können weiterhin die UI-Steuerelemente verwenden."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun tämä toiminto on pois käytöstä, kaikki pikanäppäimet ovat passiivisia. Voit kuitenkin edelleen käyttää käyttöliittymän ohjaimia."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indien uitgeschakeld, zijn alle sneltoetsen inactief. Je kunt de UI-bedieningselementen nog steeds gebruiken"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "При отключении все сочетания клавиш будут неактивны."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "เมื่อปิดใช้ ทางลัดแป้นพิมพ์ทั้งหมดจะไม่ทำงาน คุณยังสามารถใช้ปุ่มควบคุม UI"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "禁用后，所有键盘快捷键将不可用。您仍然可以使用界面控制"
+          }
+        }
+      }
+    },
+    "Hide until hovered": {
+      "localizations": {
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbergen totdat er zweefde"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрывать до наведения"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ซ่อนจนกว่าจะชี้"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬停时显示"
+          }
+        }
+      }
+    },
+    "Full Disk Access for global mode": {
+      "localizations": {
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volledige schijftoegang voor de globale modus"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Полный доступ к диску для глобального режима"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Disk Access สำหรับโหมดทั่วไป"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全局模式需要完全磁盘访问权限"
+          }
+        }
+      }
+    },
+    "Without Full Disk Access, Shelf can only read files from Documents and Downloads. Grant Full Disk Access to make Shelf work globally.": {
+      "localizations": {
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zonder volledige schijftoegang kan de plank alleen bestanden uit documenten en downloads lezen. Verleen volledige schijftoegang om de plank overal te laten werken."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "หากไม่มี Full Disk Access Shelf อ่านไฟล์ได้เฉพาะจาก Documents และ Downloads ให้สิทธิ์ Full Disk Access เพื่อให้ Shelf ทำงานได้ทั่วไป"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果没有完全磁盘访问权限，暂存器只能读取文档和下载目录的文件。授予完全磁盘访问权限以使暂存器能在全局范围工作。"
+          }
+        }
+      }
     }
   },
   "version": "1.2"

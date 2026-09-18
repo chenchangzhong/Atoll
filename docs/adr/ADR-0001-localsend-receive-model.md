@@ -24,9 +24,10 @@ obvious from the wire format:
 
 1. **One session slot, mirroring upstream's `SessionStateV2`.** A second
    `prepare-upload` while a session is pending or active is answered `409`
-   (`Another session is active`). A slot that stops making progress is released
-   after 90 s of inactivity by a reaper, so a sender that walks away cannot wedge
-   the app; progress (not elapsed time) is what keeps a transfer alive.
+   (`Blocked by another session`). A slot that stops making progress is released
+   after 90 s without progress — measured in 15 s ticks, so in practice between 90
+   and ~105 s — by a reaper, so a sender that walks away cannot wedge the app;
+   progress (not elapsed time) is what keeps a transfer alive.
 2. **Per-file UUID tokens, bound to the sender's address.** `upload` is refused
    (`403 Invalid token`) unless the session id, the file id, the token *and* the
    address that prepared the session all match. The address is compared as the
@@ -47,7 +48,17 @@ obvious from the wire format:
    generated client certificate (mandatory since LocalSend 1.18) and trusts any
    peer certificate; the server side does not ask for one. Plain HTTP on a LAN is
    an accepted risk, not an oversight — see Consequences.
-6. **The device fingerprint is derived, not invented.** It is the SHA-256 of our
+6. **Connections are bounded by activity, not by a stopwatch.** Every read has a
+   20 s deadline, and a connection that has delivered less than 256 B/s after a
+   two-minute grace period is closed — a trickle of one byte every 19 s satisfies
+   a per-read deadline, so only a throughput floor can bound it. A wall-clock
+   lifetime (30 minutes, as an earlier revision had) is simpler but wrong: it cuts
+   off a legitimate multi-gigabyte upload on a slow link. The other limits are
+   four concurrent uploads (a fifth is answered `409 Too many uploads in
+   progress`), 64 connections overall, and 8 GiB per file. `register`/`info` sit
+   outside the upload gate on purpose: a peer streaming a file must not be able to
+   make the Mac undiscoverable.
+7. **The device fingerprint is derived, not invented.** It is the SHA-256 of our
    client certificate in DER form (uppercase hex), which is upstream's
    `fingerprint_from_cert_der` and therefore also what an encrypted peer pins when
    it answers an https announcement; a persisted random value is the fallback when
@@ -63,9 +74,18 @@ obvious from the wire format:
   places in its own confirmation dialog. There is no allow-list, rate limit, or
   authentication.
 - **`~/Downloads` is the destination**, with `name (1).ext` de-duplication. A
-  transfer is only stored if the byte count matches the announced size and the
-  announced SHA-256 matches (when one is announced), so a truncated or corrupted
-  body leaves nothing behind.
+  transfer is stored only if the announced SHA-256 matches (when one is announced)
+  and, when a non-zero size was announced, the byte count matches it — up to 8 GiB.
+  A sender that announces size 0 skips the size check, so its body is whatever it
+  chose to send; that is the one path where a short body is stored rather than
+  rejected, and it is why the checksum matters when a peer provides one.
+- **Only a decision interrupts the user.** The notch opens by itself when a
+  `prepare-upload` needs an answer; an automatically accepted transfer does not
+  pop it open, and a completion only collapses a notch this flow opened, so a
+  user who chose not to be asked is not interrupted.
+- **A sender that cancels while the decision is pending** is answered `403
+  Cancelled by sender`, which is upstream's mapping; a decision nobody answers
+  resolves as a dropped decision and answers `500`.
 - **Only one transfer runs at a time**, and only four uploads may hold a
   connection slot. `register`/`info` are deliberately outside that gate: a peer
   streaming an upload must not be able to make the Mac undiscoverable.
@@ -89,3 +109,6 @@ obvious from the wire format:
   an opt-in setting instead.
 - **Refusing plain-HTTP peers outright.** Rejected: it would break every peer
   whose encryption is off, which is a supported configuration.
+- **A wall-clock cap on a connection (30 minutes).** Rejected: it bounds a
+  trickling peer only by also cutting off legitimate slow transfers; the
+  throughput floor in decision 6 bounds the trickle and nothing else.

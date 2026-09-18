@@ -103,15 +103,25 @@ final class LocalSendReceiveService: ObservableObject {
 
     private init() {}
 
-    /// Bounds concurrent *uploads* only. register/info must never be refused
-    /// because a peer parked upload connections (a drip feed used to exhaust a
-    /// global gate and make the whole server unreachable).
+    /// Bounds concurrent *uploads*: register/info must never be refused because a
+    /// peer parked upload connections.
     private static let uploadSlots = DispatchSemaphore(value: 4)
+    /// A high global ceiling, kept so that flooding the port cannot spawn an
+    /// unbounded number of reader tasks. High enough that an upload cannot make
+    /// the server unreachable for discovery traffic.
+    private static let connectionSlots = DispatchSemaphore(value: 64)
 
     /// Entry point used by the 53317 listener in `LocalSendService`.
     nonisolated func accept(_ connection: NWConnection) {
+        guard Self.connectionSlots.wait(timeout: .now()) == .success else {
+            Logger.log("LocalSend receive: refusing a connection, too many open", category: .extensions)
+            connection.cancel()
+            return
+        }
         connection.start(queue: .global(qos: .utility))
-        LocalSendHTTPConnection(connection: connection).start()
+        LocalSendHTTPConnection(connection: connection) {
+            Self.connectionSlots.signal()
+        }.start()
     }
 
     // MARK: - Session lifecycle
@@ -119,6 +129,7 @@ final class LocalSendReceiveService: ObservableObject {
     /// Outcome of a `prepare-upload`, mapped to the HTTP contract by the caller.
     enum PrepareOutcome {
         case busy
+        case cancelled
         case emptyFiles
         case accepted(sessionID: String, tokens: [String: String])
         case declined
@@ -153,6 +164,7 @@ final class LocalSendReceiveService: ObservableObject {
             decisionInFlight = false
             switch decision {
             case .declined: return .declined
+            case .cancelled: return .cancelled
             case .timedOut: return .timedOut
             case .accepted: break
             }
@@ -164,6 +176,7 @@ final class LocalSendReceiveService: ObservableObject {
     private enum LocalSendReceiveDecision {
         case accepted
         case declined
+        case cancelled
         case timedOut
     }
 
@@ -240,8 +253,12 @@ final class LocalSendReceiveService: ObservableObject {
                 let idle = await MainActor.run { Date().timeIntervalSince(self.lastSessionActivity) }
                 guard idle >= self.abandonedSessionTimeout else { continue }
                 await MainActor.run {
-                    guard self.sessionID == armed else { return }
-                    Logger.log("LocalSend receive: session \(armed ?? "?") idle for \(Int(idle))s; releasing the slot", category: .extensions)
+                    // Re-check inside the block: a new upload can have refreshed
+                    // the timestamp between the measurement and this hop.
+                    guard self.sessionID == armed,
+                          Date().timeIntervalSince(self.lastSessionActivity) >= self.abandonedSessionTimeout
+                    else { return }
+                    Logger.log("LocalSend receive: session \(armed ?? "?") idle; releasing the slot", category: .extensions)
                     self.releaseSession()
                 }
                 return
@@ -256,12 +273,14 @@ final class LocalSendReceiveService: ObservableObject {
         files = [:]
         isReceiving = false
         receiveProgress = 0
+        lastReceivedNames = []
     }
 
     /// The sender ended the transfer (`POST /api/localsend/v2/cancel`).
     func cancelTransfer(sessionID requested: String?, senderIP: String) {
         if let pending = pendingRequest, pending.senderIP == senderIP {
-            resolveDecision(.timedOut)
+            // Upstream answers 403 "Cancelled by sender" here, not a timeout.
+            resolveDecision(.cancelled)
         }
         if let activeSession = sessionID, self.senderIP == senderIP,
            requested == nil || requested == activeSession {
@@ -307,12 +326,12 @@ final class LocalSendReceiveService: ObservableObject {
                 try handle.write(contentsOf: chunk)
                 hasher.update(data: chunk)
                 written += chunk.count
-                if file.size > 0 {
-                    let fraction = min(1, Double(written) / Double(file.size))
-                    await MainActor.run {
-                        self.receiveProgress = fraction
-                        self.lastSessionActivity = Date()
-                    }
+                let fraction = file.size > 0 ? min(1, Double(written) / Double(file.size)) : 0
+                await MainActor.run {
+                    self.receiveProgress = fraction
+                    // Any byte counts as progress, including for a stream that
+                    // announced no size.
+                    self.lastSessionActivity = Date()
                 }
             }
         } catch LocalSendProtocolError.tooLarge {
@@ -410,10 +429,6 @@ final class LocalSendReceiveService: ObservableObject {
     }
 
 
-    /// The peer's address as the transport reports it. Compared verbatim against
-    /// the address that prepared the session, so IPv6 peers stay bound too
-    /// (returning nil for anything but dotted-quad used to make the check
-    /// vacuous).
     nonisolated static func acquireUploadSlot() -> Bool {
         uploadSlots.wait(timeout: .now()) == .success
     }
@@ -422,6 +437,10 @@ final class LocalSendReceiveService: ObservableObject {
         uploadSlots.signal()
     }
 
+    /// The peer's address as the transport reports it. Compared verbatim against
+    /// the address that prepared the session, so IPv6 peers stay bound too
+    /// (returning nil for anything but dotted-quad used to make the check
+    /// vacuous).
     nonisolated static func hostString(from endpoint: NWEndpoint) -> String? {
         guard case let .hostPort(host, _) = endpoint else { return nil }
         let value = host.debugDescription.replacingOccurrences(of: "\"", with: "")
@@ -449,35 +468,76 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
 
     private let connection: NWConnection
     private var buffered = Data()
-    /// Set once the connection is being torn down, so no further reply is
-    /// attempted (a stalled read would otherwise leave the response hanging).
-    private var isClosed = false
+    /// Guards the two fields every task touches; the connection is torn down from
+    /// the read path, from the watchdog and from the owning task.
+    private let stateLock = NSLock()
+    private var closedFlag = false
+    private var receivedBytes = 0
 
-    init(connection: NWConnection) {
+    private let onFinish: (() -> Void)?
+
+    init(connection: NWConnection, onFinish: (() -> Void)? = nil) {
         self.connection = connection
+        self.onFinish = onFinish
     }
 
-    /// A request must finish within this window even if it keeps trickling bytes:
-    /// the per-read deadline alone would let a one-byte-per-19s peer hold a task
-    /// (and an upload slot) indefinitely.
-    private static let connectionLifetime: TimeInterval = 30 * 60
+    /// A peer can hold a task (and an upload slot) by trickling one byte every
+    /// 19 s, because the per-read deadline is satisfied by each trickle. The guard
+    /// is therefore a *throughput floor* with a grace period, not a wall-clock
+    /// budget: a slow but real transfer is never cut off, while a connection that
+    /// has delivered almost nothing after two minutes is closed. (A 30-minute
+    /// wall-clock cap used to do the latter and cut off an 8 GiB upload on a slow
+    /// link.)
+    private static let progressTick: TimeInterval = 15
+    private static let progressGrace: TimeInterval = 120
+    private static let minimumBytesPerSecond: Double = 256
+
+    private var isClosed: Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return closedFlag
+    }
+
+    private var receivedByteCount: Int {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return receivedBytes
+    }
+
+    private func markClosed() {
+        stateLock.lock(); closedFlag = true; stateLock.unlock()
+    }
+
+    private func noteReceived(_ count: Int) {
+        stateLock.lock(); receivedBytes += count; stateLock.unlock()
+    }
 
     func start() {
-        let lifetime = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.connectionLifetime * 1_000_000_000))
-            guard !Task.isCancelled, let self else { return }
-            Logger.log("LocalSend receive: connection exceeded its lifetime", category: .extensions)
-            self.isClosed = true
-            self.connection.cancel()
+        let started = Date()
+        let watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(Self.progressTick * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                let elapsed = Date().timeIntervalSince(started)
+                guard elapsed > Self.progressGrace else { continue }
+                let received = self.receivedByteCount
+                guard Double(received) < Self.minimumBytesPerSecond * elapsed else { continue }
+                Logger.log(
+                    "LocalSend receive: closing a connection that delivered \(received) bytes in \(Int(elapsed))s",
+                    category: .extensions
+                )
+                self.markClosed()
+                self.connection.cancel()
+                return
+            }
         }
         Task.detached(priority: .utility) { [self] in
-            defer { lifetime.cancel() }
+            defer { watchdog.cancel() }
             do {
                 try await serve()
             } catch {
                 Logger.log("LocalSend receive: connection ended with \(error.localizedDescription)", category: .extensions)
             }
             connection.cancel()
+            onFinish?()
         }
     }
 
@@ -542,11 +602,13 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         )
         switch outcome {
         case .busy:
-            try await send(Self.json(status: 409, payload: ["message": "Another session is active"]))
+            try await send(Self.json(status: 409, payload: ["message": "Blocked by another session"]))
         case .emptyFiles:
             try await send(Self.json(status: 400, payload: ["message": "No files provided"]))
         case .declined:
             try await send(Self.json(status: 403, payload: ["message": "Rejected"]))
+        case .cancelled:
+            try await send(Self.json(status: 403, payload: ["message": "Cancelled by sender"]))
         case .timedOut:
             try await send(Self.json(status: 500, payload: ["message": "Internal server error"]))
         case let .accepted(sessionID, tokens):
@@ -581,7 +643,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             )
         }
         guard let file else {
-            try await send(Self.json(status: 403, payload: ["message": "Invalid token"]))
+            try await send(Self.json(status: 403, payload: ["message": "Invalid token or IP address"]))
             return
         }
 
@@ -691,7 +753,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         let deadline = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 20_000_000_000)
             guard !Task.isCancelled else { return }
-            self?.isClosed = true
+            self?.markClosed()
             connection.cancel()
         }
         defer { deadline.cancel() }
@@ -710,6 +772,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             }
         }
         guard let chunk, !chunk.isEmpty else { return false }
+        noteReceived(chunk.count)
         buffered.append(chunk)
         return true
     }

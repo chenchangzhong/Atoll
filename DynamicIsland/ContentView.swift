@@ -896,34 +896,41 @@ struct ContentView: View {
                       .transition(tabSwitchTransition)
                   }
               }
+              .onChange(of: localSendReceiveService.pendingRequest) { _, request in
+                  // Only a decision needs the user, so only a decision opens the
+                  // notch by itself: a transfer that was accepted automatically
+                  // must not pop the notch open for someone who asked not to be
+                  // asked.
+                  guard request != nil else { return }
+                  vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
+                  if vm.notchState == .closed {
+                      notchOpenedForReceive = true
+                      withAnimation(.smooth(duration: 0.3)) {
+                          vm.open()
+                      }
+                  }
+              }
               .onChange(of: isReceiveUIActive) { _, active in
                   if active {
-                      // The user chose to be told about incoming files, so open
-                      // the notch rather than waiting for a hover — and keep it
-                      // open until the decision is made, or moving the mouse
-                      // away would hide the prompt while the sender is waiting.
+                      // Also covers an automatically accepted transfer: the notch
+                      // must not collapse mid-flight just because the sender never
+                      // asked a question.
                       vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
-                      if vm.notchState == .closed {
-                          notchOpenedForReceive = true
-                          withAnimation(.smooth(duration: 0.3)) {
-                              vm.open()
-                          }
-                      }
                   } else {
                       vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
                       // Closing has to be explicit: the notch normally collapses
                       // on a mouse-exit event, and a programmatic open never
                       // generates one, so a declined, timed-out or completed
-                      // request used to leave the notch expanded. While its card
-                      // was up the receive flow owned the notch, so it hands it
-                      // back — unless the user is pointing at it or another
-                      // feature is holding it open.
-                      notchOpenedForReceive = false
-                      if vm.notchState == .open, !isHovering, !shouldPreventAutoClose() {
-                          withAnimation(.smooth(duration: 0.25)) {
-                              vm.close()
+                      // request used to leave the notch expanded. Only a notch this
+                      // flow opened is handed back, unless the user is pointing at
+                      // it or another feature is holding it open.
+                      if notchOpenedForReceive {
+                          notchOpenedForReceive = false
+                          if !isHovering, !shouldPreventAutoClose() {
+                              withAnimation(.smooth(duration: 0.25)) {
+                                  vm.close()
+                              }
                           }
-                      } else if vm.notchState == .open {
                       }
                   }
               }
