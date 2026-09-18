@@ -529,6 +529,10 @@ extension Defaults.Keys {
     
         // MARK: Shelf
     static let dynamicShelf = Key<Bool>("dynamicShelf", default: true)
+    /// Fallback device fingerprint, used only when no client certificate can be
+    /// produced; the certificate's SHA-256 is preferred.
+    static let localSendDeviceFingerprint = Key<String>("localSendDeviceFingerprint", default: "")
+    
     /// When false (the default) Atoll asks in the notch before storing files
     /// pushed in by LocalSend peers; when true it stores them straight away.
     static let localSendAutoAcceptIncoming = Key<Bool>("localSendAutoAcceptIncoming", default: false)

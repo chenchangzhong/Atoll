@@ -85,6 +85,10 @@ final class LocalSendService: NSObject, ObservableObject {
     private var discoveredByID: [String: (device: LocalSendDeviceInfo, lastSeen: Date)] = [:]
     private var recentProbeIPs: [String] = []
     private var knownPeerIPs: [String] = []
+    /// Our own fingerprint as it appears in announcements, register payloads and
+    /// self-filtering comparisons.
+    nonisolated static var deviceFingerprint: String { LocalSendIdentity.fingerprint() }
+
     private var isStarted = false
     /// While the shelf is enabled and LocalSend is the chosen share provider,
     /// discovery (listener + multicast + announcements) stays up so peers can
@@ -634,7 +638,7 @@ final class LocalSendService: NSObject, ObservableObject {
             for path in paths {
                 guard var components = URLComponents(string: "\(scheme)://\(ip):\(port)\(path)") else { continue }
                 components.queryItems = [
-                    URLQueryItem(name: "fingerprint", value: "atoll.localsend.bridge"),
+                    URLQueryItem(name: "fingerprint", value: Self.deviceFingerprint),
                 ]
                 guard let url = components.url else { continue }
 
@@ -649,7 +653,7 @@ final class LocalSendService: NSObject, ObservableObject {
                           let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                           let fingerprint = json["fingerprint"] as? String,
                           let alias = json["alias"] as? String,
-                          fingerprint != "atoll.localsend.bridge"
+                          fingerprint != Self.deviceFingerprint
                     else {
                         continue
                     }
@@ -890,7 +894,7 @@ final class LocalSendService: NSObject, ObservableObject {
             "version": "2.1",
             "deviceModel": "Mac",
             "deviceType": "desktop",
-            "fingerprint": "atoll.localsend.bridge",
+            "fingerprint": Self.deviceFingerprint,
             "port": defaultPort,
             // Use HTTP here so LocalSend peers can quickly fail over to UDP response
             // when Atoll is not serving LocalSend register endpoint.
@@ -1003,7 +1007,7 @@ final class LocalSendService: NSObject, ObservableObject {
                let fingerprint = json["fingerprint"] as? String,
                let alias = json["alias"] as? String,
                let callerIP,
-               fingerprint != "atoll.localsend.bridge" {
+               fingerprint != Self.deviceFingerprint {
                 let device = LocalSendDeviceInfo(
                     id: fingerprint,
                     alias: alias,
@@ -1034,8 +1038,8 @@ final class LocalSendService: NSObject, ObservableObject {
                 "version": "2.1",
                 "deviceModel": "Mac",
                 "deviceType": "desktop",
-                "token": "atoll.localsend.bridge",
-                "fingerprint": "atoll.localsend.bridge",
+                "token": Self.deviceFingerprint,
+                "fingerprint": Self.deviceFingerprint,
                 "download": false,
                 "hasWebInterface": false,
             ]
@@ -1048,7 +1052,7 @@ final class LocalSendService: NSObject, ObservableObject {
                 "version": "2.1",
                 "deviceModel": "Mac",
                 "deviceType": "desktop",
-                "fingerprint": "atoll.localsend.bridge",
+                "fingerprint": Self.deviceFingerprint,
                 "port": defaultPort,
                 "protocol": "http",
                 "download": false,
@@ -1087,7 +1091,7 @@ final class LocalSendService: NSObject, ObservableObject {
               let alias = json["alias"] as? String
         else { return }
 
-        if fingerprint == "atoll.localsend.bridge" { return }
+        if fingerprint == Self.deviceFingerprint { return }
 
         // Trust only the source address: upstream announcements carry no "ip"
         // field (checked against LocalSend v1.18.2's DTOs), so honouring one would
@@ -1227,8 +1231,8 @@ final class LocalSendService: NSObject, ObservableObject {
                 "version": "2.1",
                 "deviceModel": "Mac",
                 "deviceType": "desktop",
-                "fingerprint": "atoll.localsend.bridge",
-                "token": "atoll.localsend.bridge",
+                "fingerprint": Self.deviceFingerprint,
+                "token": Self.deviceFingerprint,
                 "port": defaultPort,
                 "protocol": device.https ? "https" : "http",
                 "download": false,
@@ -1455,12 +1459,56 @@ private enum LocalSendIdentity {
     private static let passphrase = "atoll-localsend"
     private static let lock = NSLock()
     private static var cached: SecIdentity?
+    private static var cachedFingerprint: String?
     /// When the last generation attempt was made. Generating runs three openssl
     /// subprocesses, so a failure backs off instead of retrying on every
     /// handshake — but it does retry (a transient failure must not need an app
     /// relaunch to recover).
     private static var lastAttempt: Date?
     private static let attemptCooldown: TimeInterval = 60
+
+    /// The device's own LocalSend fingerprint.
+    ///
+    /// Upstream derives it as the SHA-256 of the client certificate in DER form,
+    /// uppercase hex (`fingerprint_from_cert_der`), and an encrypted peer pins
+    /// exactly that value when it answers an https announcement. Deriving it here
+    /// also fixes a real defect: every install used to announce the literal
+    /// "atoll.localsend.bridge" and filter that literal out, so no two Atoll Macs
+    /// could ever see each other.
+    static func fingerprint() -> String {
+        lock.lock()
+        let cachedValue = cachedFingerprint
+        lock.unlock()
+        if let cachedValue { return cachedValue }
+
+        let value = deriveFingerprint()
+        lock.lock()
+        cachedFingerprint = value
+        lock.unlock()
+        return value
+    }
+
+    private static func deriveFingerprint() -> String {
+        if let identity = identity(), let certificate = certificate(of: identity) {
+            let der = SecCertificateCopyData(certificate) as Data
+            return SHA256.hash(data: der).map { String(format: "%02X", $0) }.joined()
+        }
+        // No usable identity (openssl unavailable): a per-install random value
+        // still keeps installs apart, following the protocol's "random string".
+        if !Defaults[.localSendDeviceFingerprint].isEmpty {
+            return Defaults[.localSendDeviceFingerprint]
+        }
+        let generated = UUID().uuidString
+        Defaults[.localSendDeviceFingerprint] = generated
+        Logger.log("LocalSend: no client certificate, using a random device fingerprint", category: .extensions)
+        return generated
+    }
+
+    private static func certificate(of identity: SecIdentity) -> SecCertificate? {
+        var certificate: SecCertificate?
+        guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess else { return nil }
+        return certificate
+    }
 
     static func identity() -> SecIdentity? {
         lock.lock()
