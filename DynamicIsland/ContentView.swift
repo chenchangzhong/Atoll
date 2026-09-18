@@ -887,6 +887,13 @@ struct ContentView: View {
                       .transition(tabSwitchTransition)
                   }
               }
+              .onChange(of: vm.isAutoCloseSuppressed) { _, suppressed in
+                  // Esc or the lock screen can drop the token; a request that is
+                  // still waiting must keep the notch open.
+                  if !suppressed, localSendReceiveService.pendingRequest != nil {
+                      vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
+                  }
+              }
               .onChange(of: localSendReceiveService.pendingRequest) { _, request in
                   // The user chose to be told about incoming files, so open the
                   // notch rather than waiting for a hover — and keep it open

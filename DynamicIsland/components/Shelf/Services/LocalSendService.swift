@@ -1678,20 +1678,27 @@ enum LocalSendServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noDeviceSelected:
-            return "No LocalSend device selected"
+            return NSLocalizedString("No LocalSend device selected", comment: "LocalSend: nothing picked in the device list")
         case .noTransferableItems:
-            return "No transferable files or text found"
+            return NSLocalizedString("No transferable files or text found", comment: "LocalSend: the dropped items cannot be sent")
         case .invalidTarget:
-            return "Invalid LocalSend target"
+            return NSLocalizedString("Invalid LocalSend target", comment: "LocalSend: malformed target address")
         case .invalidResponse:
-            return "Invalid response from LocalSend peer"
+            return NSLocalizedString("Invalid response from LocalSend peer", comment: "LocalSend: the peer answered with something unexpected")
         case .server(let status, let body):
             if let body, !body.isEmpty {
-                return "LocalSend peer error (\(status)): \(body)"
+                return String(
+                    format: NSLocalizedString("LocalSend peer error (%lld): %@", comment: "LocalSend: peer error with a body"),
+                    status,
+                    body
+                )
             }
-            return "LocalSend peer error (\(status))"
+            return String(
+                format: NSLocalizedString("LocalSend peer error (%lld)", comment: "LocalSend: peer error status"),
+                status
+            )
         case .transferRejected:
-            return "Transfer was rejected by the recipient"
+            return NSLocalizedString("Transfer was rejected by the recipient", comment: "LocalSend: the receiver declined")
         case .pinRequired(let deviceName):
             return String(
                 format: NSLocalizedString(
