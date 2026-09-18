@@ -315,7 +315,7 @@ final class LocalSendReceiveService: ObservableObject {
                     }
                 }
             }
-        } catch LocalSendHTTPError.tooLarge {
+        } catch LocalSendProtocolError.tooLarge {
             try? FileManager.default.removeItem(at: temporary)
             await MainActor.run { self.isReceiving = false }
             Logger.log("LocalSend receive: \(file.name) exceeded the declared size", category: .extensions)
@@ -396,7 +396,7 @@ final class LocalSendReceiveService: ObservableObject {
 
     /// `file (1).txt`, the same shape LocalSend uses, and never a path.
     private func uniqueDestination(for rawName: String) -> URL {
-        let name = Self.sanitizedFileName(rawName)
+        let name = LocalSendProtocol.sanitizedFileName(rawName)
         let base = (name as NSString).deletingPathExtension
         let ext = (name as NSString).pathExtension
         var candidate = destinationDirectory.appendingPathComponent(name)
@@ -409,17 +409,6 @@ final class LocalSendReceiveService: ObservableObject {
         return candidate
     }
 
-    nonisolated static func sanitizedFileName(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let last = (trimmed as NSString).lastPathComponent
-        let cleaned = last
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: ":", with: "_")
-        if cleaned.isEmpty || cleaned == "." || cleaned == ".." {
-            return "received-file"
-        }
-        return cleaned
-    }
 
     /// The peer's address as the transport reports it. Compared verbatim against
     /// the address that prepared the session, so IPv6 peers stay bound too
@@ -494,7 +483,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
 
     private func serve() async throws {
         guard let head = try await readHead() else { return }
-        guard let request = LocalSendHTTPRequest(head: head) else {
+        guard let request = LocalSendProtocol.RequestHead(data: head) else {
             // Worth knowing about: it means we answered nothing to a peer.
             let firstLine = String(data: head.prefix(80), encoding: .utf8) ?? "<binary>"
             Logger.log("LocalSend receive: unparsable request head \(firstLine)", category: .extensions)
@@ -523,7 +512,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
 
     // MARK: prepare-upload
 
-    private func handlePrepareUpload(_ request: LocalSendHTTPRequest) async throws {
+    private func handlePrepareUpload(_ request: LocalSendProtocol.RequestHead) async throws {
         let declared = min(request.contentLength ?? 0, Self.maximumPrepareBodySize)
         let body = declared > 0 ? try await readExactly(declared) : Data()
 
@@ -567,7 +556,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
 
     // MARK: upload
 
-    private func handleUpload(_ request: LocalSendHTTPRequest) async throws {
+    private func handleUpload(_ request: LocalSendProtocol.RequestHead) async throws {
         guard let sessionID = request.query["sessionId"],
               let fileID = request.query["fileId"],
               let token = request.query["token"]
@@ -625,7 +614,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
 
     /// `POST /api/localsend/v2/cancel` — the sender aborted. v2 senders do not
     /// know the session id before prepare-upload answers, so it may be absent.
-    private func handleCancel(_ request: LocalSendHTTPRequest) async throws {
+    private func handleCancel(_ request: LocalSendProtocol.RequestHead) async throws {
         let senderIP = LocalSendReceiveService.hostString(from: connection.endpoint) ?? "?"
         await MainActor.run {
             LocalSendReceiveService.shared.cancelTransfer(
@@ -647,7 +636,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
                 buffered.removeSubrange(buffered.startIndex ..< range.upperBound)
                 return head
             }
-            if buffered.count > Self.maximumHeadSize { throw LocalSendHTTPError.headTooLarge }
+            if buffered.count > Self.maximumHeadSize { throw LocalSendProtocolError.headTooLarge }
             guard try await fill() else { return nil }
         }
     }
@@ -659,12 +648,12 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
                 let lineData = buffered.subdata(in: buffered.startIndex ..< range.lowerBound)
                 buffered.removeSubrange(buffered.startIndex ..< range.upperBound)
                 guard let line = String(data: lineData, encoding: .utf8) else {
-                    throw LocalSendHTTPError.malformedChunk
+                    throw LocalSendProtocolError.malformedChunk
                 }
                 return line
             }
-            if buffered.count > maximum { throw LocalSendHTTPError.malformedChunk }
-            guard try await fill() else { throw LocalSendHTTPError.truncatedBody }
+            if buffered.count > maximum { throw LocalSendProtocolError.malformedChunk }
+            guard try await fill() else { throw LocalSendProtocolError.truncatedBody }
         }
     }
 
@@ -680,7 +669,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
                 buffered.removeFirst(take)
                 continue
             }
-            guard try await fill() else { throw LocalSendHTTPError.truncatedBody }
+            guard try await fill() else { throw LocalSendProtocolError.truncatedBody }
         }
         return result
     }
@@ -777,12 +766,6 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     }
 }
 
-private enum LocalSendHTTPError: Error {
-    case headTooLarge
-    case truncatedBody
-    case malformedChunk
-    case tooLarge
-}
 
 /// Decodes `Transfer-Encoding: chunked`, which is what LocalSend's senders use
 /// when they stream a file without knowing its length up front.
@@ -805,18 +788,14 @@ private final class LocalSendChunkedBody: LocalSendHTTPBody, @unchecked Sendable
         while remainingInChunk == 0 {
             guard !finished else { return nil }
             let header = try await source.readLine(maximum: 1024)
-            let sizeText = header.split(separator: ";").first.map(String.init) ?? ""
-            guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16), size >= 0 else {
-                throw LocalSendHTTPError.malformedChunk
-            }
+            let size = try LocalSendProtocol.chunkSize(fromLine: header)
             if size == 0 {
                 _ = try? await source.readLine(maximum: 8 * 1024)  // optional trailer
                 finished = true
                 return nil
             }
-            // Check before adding: `delivered + size` could overflow and trap.
-            guard size <= maximumBytes - delivered else { throw LocalSendHTTPError.tooLarge }
-            delivered += size
+            // Overflow-safe by construction: see LocalSendProtocol.acceptingChunkSize.
+            delivered = try LocalSendProtocol.acceptingChunkSize(size, delivered: delivered, maximum: maximumBytes)
             remainingInChunk = size
         }
 
@@ -829,44 +808,6 @@ private final class LocalSendChunkedBody: LocalSendHTTPBody, @unchecked Sendable
     }
 }
 
-private struct LocalSendHTTPRequest {
-    let method: String
-    let path: String
-    let query: [String: String]
-    let contentLength: Int?
-    /// Senders streaming a file (the phones do) use chunked framing instead of a
-    /// declared length.
-    let isChunked: Bool
-
-    init?(head: Data) {
-        guard let text = String(data: head, encoding: .utf8),
-              let requestLine = text.components(separatedBy: "\r\n").first
-        else { return nil }
-        let parts = requestLine.split(separator: " ")
-        guard parts.count >= 2 else { return nil }
-        method = String(parts[0]).uppercased()
-        let target = String(parts[1])
-        let split = target.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
-        path = String(split[0])
-
-        var parsed: [String: String] = [:]
-        if split.count > 1 {
-            for pair in split[1].split(separator: "&") {
-                let kv = pair.split(separator: "=", maxSplits: 1)
-                if kv.count == 2 {
-                    parsed[String(kv[0])] = String(kv[1]).removingPercentEncoding ?? String(kv[1])
-                }
-            }
-        }
-        query = parsed
-
-        let headerLines = text.components(separatedBy: "\r\n")
-        contentLength = headerLines
-            .first { $0.lowercased().hasPrefix("content-length:") }
-            .flatMap { Int($0.split(separator: ":").dropFirst().joined().trimmingCharacters(in: .whitespaces)) }
-        isChunked = headerLines.contains { $0.lowercased().hasPrefix("transfer-encoding:") && $0.lowercased().contains("chunked") }
-    }
-}
 
 /// Streams exactly `length` body bytes off the connection.
 private final class LocalSendStreamingBody: LocalSendHTTPBody, @unchecked Sendable {
@@ -885,7 +826,7 @@ private final class LocalSendStreamingBody: LocalSendHTTPBody, @unchecked Sendab
             remaining -= buffered.count
             return buffered
         }
-        guard try await source.fill() else { throw LocalSendHTTPError.truncatedBody }
+        guard try await source.fill() else { throw LocalSendProtocolError.truncatedBody }
         let chunk = source.takeBuffered(min(remaining, 256 * 1024))
         guard !chunk.isEmpty else { return nil }
         remaining -= chunk.count
