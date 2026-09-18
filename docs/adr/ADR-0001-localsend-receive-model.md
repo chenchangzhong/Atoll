@@ -1,0 +1,91 @@
+# ADR-0001: The LocalSend receive model
+
+- Status: accepted
+- Date: 2026-09-19
+
+## Context
+
+Atoll speaks LocalSend's v2 HTTP contract on TCP 53317 so it can send files to
+phones. The reverse direction — a phone pushing a file to the Mac — needs a
+server, and the protocol gives the app room to decide several things that are not
+obvious from the wire format:
+
+- **What the token is worth.** `prepare-upload` hands out a per-file token and the
+  sender echoes it on `upload`. Nothing in the protocol says what happens if a
+  token leaks, and the same LAN may hold untrusted devices.
+- **How many transfers may be in flight.** Senders can prepare a second upload
+  while the first is still running.
+- **Who decides.** Upstream's core blocks the `prepare-upload` handler on the
+  app's decision (a oneshot channel); dropping it yields 500.
+- **When the server exists at all.** Atoll's discovery lifecycle is driven by the
+  share UI, and that lifecycle is what used to create the 53317 listener.
+
+## Decision
+
+1. **One session slot, mirroring upstream's `SessionStateV2`.** A second
+   `prepare-upload` while a session is pending or active is answered `409`
+   (`Another session is active`). A slot that stops making progress is released
+   after 90 s of inactivity by a reaper, so a sender that walks away cannot wedge
+   the app; progress (not elapsed time) is what keeps a transfer alive.
+2. **Per-file UUID tokens, bound to the sender's address.** `upload` is refused
+   (`403 Invalid token`) unless the session id, the file id, the token *and* the
+   address that prepared the session all match. The address is compared as the
+   transport reports it (not parsed into IPv4), so an IPv6 peer is bound too.
+3. **The user decides, in Atoll's own notch.** `prepare-upload` publishes a
+   pending request, and the request is answered `200` with the tokens only after
+   the user accepts, `403` when declined, and `500` when the 60 s window passes
+   with no answer — upstream's "dropped decision" semantics. The default is to
+   ask; a setting can opt into accepting automatically.
+4. **Receive availability is gated on `dynamicShelf && quickShareProvider ==
+   "LocalSend"`.** While that holds, the 53317 listener and the multicast
+   discovery run from launch and are exempt from the idle teardown. There is no
+   separate "receive" switch: the receive capability is considered part of using
+   LocalSend as the share provider.
+5. **Transport security is the peer's choice, and we do not require one.** Atoll
+   announces `protocol: "http"`, so a peer that follows the announcement speaks
+   plain HTTP. Against peers with encryption on, the *client* side presents a
+   generated client certificate (mandatory since LocalSend 1.18) and trusts any
+   peer certificate; the server side does not ask for one. Plain HTTP on a LAN is
+   an accepted risk, not an oversight — see Consequences.
+6. **The device fingerprint is derived, not invented.** It is the SHA-256 of our
+   client certificate in DER form (uppercase hex), which is upstream's
+   `fingerprint_from_cert_der` and therefore also what an encrypted peer pins when
+   it answers an https announcement; a persisted random value is the fallback when
+   no certificate can be produced. A shared literal fingerprint once made every
+   install filter every other install out of its device list.
+
+## Consequences
+
+- **Anyone on the LAN can offer files while the gate is open.** They cannot write
+  anything without the user accepting the notch prompt (or opting into automatic
+  acceptance), and they cannot use a leaked token from another address. The model
+  trusts the local network and the user's click — the same trust upstream's app
+  places in its own confirmation dialog. There is no allow-list, rate limit, or
+  authentication.
+- **`~/Downloads` is the destination**, with `name (1).ext` de-duplication. A
+  transfer is only stored if the byte count matches the announced size and the
+  announced SHA-256 matches (when one is announced), so a truncated or corrupted
+  body leaves nothing behind.
+- **Only one transfer runs at a time**, and only four uploads may hold a
+  connection slot. `register`/`info` are deliberately outside that gate: a peer
+  streaming an upload must not be able to make the Mac undiscoverable.
+- **A 60 s decision window is a user-facing deadline.** A prompt that is ignored
+  makes the sender fail; that is upstream's contract and is what the notch card
+  says out loud.
+- **Switching the share provider to AirDrop stops receiving.** That follows from
+  the gate in decision 4; it is intended, and it is the most likely surprise for a
+  new user.
+
+## Alternatives considered
+
+- **A separate receive switch.** Rejected because the receive capability is only
+  meaningful together with the LocalSend share provider; a fresh install should
+  not open a server it never uses. The cost is discoverability, accepted
+  knowingly.
+- **Trusting the token alone (no address binding).** Rejected: the token travels
+  in a URL, and the binding is the only thing that makes a leaked URL useless from
+  another machine.
+- **Accepting everything silently.** Rejected as the default; it is available as
+  an opt-in setting instead.
+- **Refusing plain-HTTP peers outright.** Rejected: it would break every peer
+  whose encryption is off, which is a supported configuration.
