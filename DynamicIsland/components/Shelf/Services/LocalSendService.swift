@@ -1399,9 +1399,13 @@ final class LocalSendService: NSObject, ObservableObject {
         guard nsError.domain == NSURLErrorDomain else { return nil }
         switch URLError.Code(rawValue: nsError.code) {
         case .networkConnectionLost, .secureConnectionFailed, .clientCertificateRejected:
-            return """
-            Could not finish the encrypted handshake with \(target.alias): either its LocalSend encryption rejected Atoll's client certificate, or the connection to it dropped. Turning off “Encryption” on that device (Settings → Network) avoids the certificate path entirely.
-            """
+            return String(
+                format: NSLocalizedString(
+                    "Could not finish the encrypted handshake with %@: either its LocalSend encryption rejected Atoll's client certificate, or the connection to it dropped. Turning off “Encryption” on that device (Settings → Network) avoids the certificate path entirely.",
+                    comment: "LocalSend: TLS failure against an encrypted peer"
+                ),
+                target.alias
+            )
         default:
             return nil
         }
@@ -1683,7 +1687,13 @@ enum LocalSendServiceError: LocalizedError {
         case .transferRejected:
             return "Transfer was rejected by the recipient"
         case .pinRequired(let deviceName):
-            return "\(deviceName) requires a PIN. Disable the PIN on the receiving device, or accept the transfer there by entering the PIN."
+            return String(
+                format: NSLocalizedString(
+                    "%@ requires a PIN. Disable the PIN on the receiving device, or accept the transfer there by entering the PIN.",
+                    comment: "LocalSend: the receiver asks for a PIN"
+                ),
+                deviceName
+            )
         }
     }
 }

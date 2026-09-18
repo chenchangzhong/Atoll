@@ -295,8 +295,8 @@ final class LocalSendReceiveService: ObservableObject {
                 self.sessionStartedAt = nil
                 let names = self.lastReceivedNames
                 self.completionText = names.count == 1
-                    ? "Stored \(names[0]) in Downloads"
-                    : "Stored \(names.count) files in Downloads"
+                    ? String(format: NSLocalizedString("Stored %@ in Downloads", comment: "LocalSend: a received file was stored"), names[0])
+                    : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
                 self.clearCompletionTask?.cancel()
                 self.clearCompletionTask = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 6_000_000_000)

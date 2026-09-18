@@ -41,7 +41,7 @@ struct LocalSendReceiveRequestView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Incoming files")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("\(request.senderAlias) wants to send \(request.files.count) file\(request.files.count == 1 ? "" : "s")")
+                    Text("From \(request.senderAlias)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -116,7 +116,7 @@ struct LocalSendReceiveRequestView: View {
         .padding(.vertical, 14)
     }
 
-    private func capsuleButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
+    private func capsuleButton(_ title: LocalizedStringKey, filled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
