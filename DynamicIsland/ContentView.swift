@@ -61,6 +61,7 @@ struct ContentView: View {
     private var isReceiveUIActive: Bool {
         localSendReceiveService.pendingRequest != nil
             || localSendReceiveService.isReceiving
+            || localSendReceiveService.failureText != nil
             || localSendReceiveService.completionText != nil
     }
     @State private var downloadManager = DownloadManager.shared

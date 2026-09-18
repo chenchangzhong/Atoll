@@ -23,6 +23,8 @@ struct LocalSendReceiveRequestView: View {
                 requestCard(request)
             } else if receive.isReceiving {
                 progressCard
+            } else if let failure = receive.failureText {
+                failureCard(failure)
             } else if let completion = receive.completionText {
                 completionCard(completion)
             }
@@ -100,6 +102,26 @@ struct LocalSendReceiveRequestView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private func failureCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.orange)
+                Text(text)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                capsuleButton("Release", filled: false) { receive.discardFailedTransfer() }
+            }
+            Text("The sender can retry until the session is released.")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 
     private func completionCard(_ text: String) -> some View {

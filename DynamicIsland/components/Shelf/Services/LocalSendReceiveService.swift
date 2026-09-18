@@ -92,6 +92,10 @@ final class LocalSendReceiveService: ObservableObject {
     /// Short-lived summary the notch shows once a transfer is stored.
     @Published private(set) var completionText: String?
     private var clearCompletionTask: Task<Void, Never>?
+    /// Set when an upload fails. Without it the notch retracted silently while the
+    /// session slot stayed claimed, and the next sender only got a 409.
+    @Published private(set) var failureText: String?
+    private var clearFailureTask: Task<Void, Never>?
 
     /// How long the sender waits for the user before we answer 500.
     private let decisionTimeout: TimeInterval = 60
@@ -268,12 +272,51 @@ final class LocalSendReceiveService: ObservableObject {
 
     /// Clears the single session slot and everything the notch derives from it.
     private func releaseSession() {
+        failureText = nil
         sessionID = nil
         senderIP = nil
         files = [:]
         isReceiving = false
         receiveProgress = 0
         lastReceivedNames = []
+    }
+
+    /// Records a failed upload: what the notch shows, and why the session is still
+    /// claimed (upstream lets the sender retry the same file, so the slot is kept
+    /// until the reaper or an explicit release).
+    func noteUploadFailure(_ error: LocalSendReceiveError, fileName: String) {
+        let reason: String
+        switch error {
+        case .unprocessable:
+            reason = NSLocalizedString("Checksum mismatch", comment: "LocalSend: the received file does not match its hash")
+        case .badRequest:
+            reason = NSLocalizedString("Larger than announced", comment: "LocalSend: the upload exceeded the size it declared")
+        default:
+            reason = NSLocalizedString("Transfer interrupted", comment: "LocalSend: the upload failed")
+        }
+        failureText = String(
+            format: NSLocalizedString("Could not receive %@: %@", comment: "LocalSend: failure card title"),
+            fileName,
+            reason
+        )
+        clearFailureTask?.cancel()
+        clearFailureTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.failureText = nil }
+        }
+        Logger.log("LocalSend receive: \(fileName) failed — \(reason)", category: .extensions)
+    }
+
+    /// The user released a failed transfer instead of waiting for the reaper.
+    func discardFailedTransfer() {
+        clearFailureTask?.cancel()
+        clearFailureTask = nil
+        failureText = nil
+        sessionReaperTask?.cancel()
+        sessionReaperTask = nil
+        releaseSession()
+        Logger.log("LocalSend receive: failed transfer released by the user", category: .extensions)
     }
 
     /// The sender ended the transfer (`POST /api/localsend/v2/cancel`).
@@ -660,6 +703,9 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         }
         let failure = await LocalSendReceiveService.shared.receiveUpload(file: file, body: reader)
         if let failure {
+            await MainActor.run {
+                LocalSendReceiveService.shared.noteUploadFailure(failure, fileName: file.name)
+            }
             let message: String
             switch failure {
             case .unprocessable: message = "Content hash mismatch"
