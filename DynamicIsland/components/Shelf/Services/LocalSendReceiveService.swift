@@ -319,6 +319,19 @@ final class LocalSendReceiveService: ObservableObject {
         Logger.log("LocalSend receive: failed transfer released by the user", category: .extensions)
     }
 
+    /// The sender walked away while we were still waiting for the user.
+    ///
+    /// A v2 sender cannot send `/cancel` before it knows the session id — that is
+    /// only known once `prepare-upload` answers — so an abandoned request shows up
+    /// as the connection closing. Without this the card kept asking, the slot
+    /// stayed claimed, and clicking Accept created a session nobody would ever
+    /// upload to.
+    func abandonPendingRequest(senderIP: String) {
+        guard let pending = pendingRequest, pending.senderIP == senderIP else { return }
+        Logger.log("LocalSend receive: sender left while the decision was pending", category: .extensions)
+        resolveDecision(.cancelled)
+    }
+
     /// The sender ended the transfer (`POST /api/localsend/v2/cancel`).
     func cancelTransfer(sessionID requested: String?, senderIP: String) {
         if let pending = pendingRequest, pending.senderIP == senderIP {
@@ -638,6 +651,21 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         }
 
         let alias = ((json["info"] as? [String: Any])?["alias"] as? String) ?? senderIP
+        // Watch the connection while the user decides: if the sender gives up it
+        // just disconnects, and nothing else would ever tell the card to go away.
+        let peerWatch = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                guard await self.waitForPeerClose() else { continue }
+                self.markClosed()
+                await MainActor.run {
+                    LocalSendReceiveService.shared.abandonPendingRequest(senderIP: senderIP)
+                }
+                return
+            }
+        }
+        defer { peerWatch.cancel() }
+
         let outcome = await LocalSendReceiveService.shared.prepare(
             files: incoming,
             senderAlias: alias,
@@ -715,6 +743,23 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             try await send(Self.json(status: failure.statusCode, payload: ["message": message]))
         } else {
             try await send(Self.data(status: 200, body: Data()))
+        }
+    }
+
+    /// True once the peer has closed the connection (or it failed). Used while the
+    /// decision is pending: a sender that gives up simply disconnects.
+    private func waitForPeerClose() async -> Bool {
+        let connection = self.connection
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { data, _, isComplete, error in
+                if error != nil {
+                    continuation.resume(returning: true)
+                } else if let data, !data.isEmpty {
+                    continuation.resume(returning: false)   // unexpected data; keep watching
+                } else {
+                    continuation.resume(returning: isComplete)
+                }
+            }
         }
     }
 
