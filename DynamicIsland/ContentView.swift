@@ -47,6 +47,7 @@ struct ContentView: View {
     @ObservedObject var lockScreenManager = LockScreenManager.shared
     @ObservedObject var capsLockManager = CapsLockManager.shared
     @ObservedObject var localSendService = LocalSendService.shared
+    @ObservedObject var localSendReceiveService = LocalSendReceiveService.shared
     @State private var downloadManager = DownloadManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
     
@@ -866,15 +867,32 @@ struct ContentView: View {
               ZStack {
                   if vm.notchState == .open {
                       Group {
-                          switch coordinator.currentView {
-                              case .home:
-                                  NotchHomeView(albumArtNamespace: albumArtNamespace)
-                              case .shelf:
-                                  NotchShelfView()
+                          // An incoming transfer takes over the expanded notch so
+                          // the user can accept or decline without leaving Atoll.
+                          if localSendReceiveService.pendingRequest != nil
+                              || localSendReceiveService.isReceiving
+                              || localSendReceiveService.completionText != nil {
+                              LocalSendReceiveRequestView()
+                          } else {
+                              switch coordinator.currentView {
+                                  case .home:
+                                      NotchHomeView(albumArtNamespace: albumArtNamespace)
+                                  case .shelf:
+                                      NotchShelfView()
+                              }
                           }
                       }
                       .id(coordinator.currentView)
                       .transition(tabSwitchTransition)
+                  }
+              }
+              .onChange(of: localSendReceiveService.pendingRequest) { _, request in
+                  // The user chose to be told about incoming files, so open the
+                  // notch rather than waiting for a hover.
+                  if request != nil {
+                      withAnimation(.smooth(duration: 0.3)) {
+                          vm.open()
+                      }
                   }
               }
               .zIndex(1)

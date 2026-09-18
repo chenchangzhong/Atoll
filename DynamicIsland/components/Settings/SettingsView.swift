@@ -3184,9 +3184,12 @@ private struct LocalSendSettingsSection: View {
     
     @Default(.localSendDevicePickerGlassMode) private var glassMode
     @Default(.localSendDevicePickerLiquidGlassVariant) private var liquidGlassVariant
+    @Default(.localSendAutoAcceptIncoming) private var autoAcceptIncoming
     
     var body: some View {
         Section {
+            Toggle("Accept incoming files automatically", isOn: $autoAcceptIncoming)
+            
             Picker("Device Picker Style", selection: $glassMode) {
                 ForEach(LockScreenGlassCustomizationMode.allCases) { mode in
                     Text(mode.localizedName).tag(mode)
@@ -3203,9 +3206,9 @@ private struct LocalSendSettingsSection: View {
                 .pickerStyle(.menu)
             }
         } header: {
-            Text("LocalSend Device Picker")
+            Text("LocalSend")
         } footer: {
-            Text("Customize the appearance of the LocalSend device selection popup that appears when you drop files.")
+            Text("Files sent to this Mac land in your Downloads folder. By default Atoll asks first, in the notch; accept automatically to skip that.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

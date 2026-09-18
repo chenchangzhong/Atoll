@@ -529,6 +529,8 @@ extension Defaults.Keys {
     
         // MARK: Shelf
     static let dynamicShelf = Key<Bool>("dynamicShelf", default: true)
+    /// Ask before storing files pushed in by LocalSend peers (the notch card).
+    static let localSendAutoAcceptIncoming = Key<Bool>("localSendAutoAcceptIncoming", default: false)
     static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
         static let quickShareProvider = Key<String>("quickShareProvider", default: "AirDrop")
         static let localSendSelectedDeviceID = Key<String>("localSendSelectedDeviceID", default: "")

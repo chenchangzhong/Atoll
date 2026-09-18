@@ -12,6 +12,7 @@ import Foundation
 import Network
 import CryptoKit
 import Darwin
+import Defaults
 
 /// Reason an upload was refused, mirroring upstream's HTTP contract.
 enum LocalSendReceiveError: Equatable {
@@ -30,6 +31,23 @@ enum LocalSendReceiveError: Equatable {
         case .server: return 500
         }
     }
+}
+
+/// A `prepare-upload` that is waiting for the user's decision.
+struct LocalSendIncomingRequest: Equatable, Identifiable {
+    struct File: Equatable {
+        let name: String
+        let size: Int
+
+        var formattedSize: String {
+            ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+        }
+    }
+
+    let id = UUID()
+    let senderAlias: String
+    let senderIP: String
+    let files: [File]
 }
 
 /// One file inside an accepted receive session.
@@ -70,6 +88,18 @@ final class LocalSendReceiveService: ObservableObject {
     @Published private(set) var receivedCount = 0
     @Published private(set) var receiveProgress: Double = 0
     @Published private(set) var isReceiving = false
+    /// Set while a `prepare-upload` is waiting for the user's decision; the notch
+    /// renders its card from this.
+    @Published private(set) var pendingRequest: LocalSendIncomingRequest?
+    @Published private(set) var lastReceivedNames: [String] = []
+    /// Short-lived summary the notch shows once a transfer is stored.
+    @Published private(set) var completionText: String?
+    private var clearCompletionTask: Task<Void, Never>?
+
+    /// How long the sender waits for the user before we answer 500.
+    private let decisionTimeout: TimeInterval = 60
+    private var decisionContinuation: CheckedContinuation<LocalSendReceiveDecision, Never>?
+    private var decisionTimeoutTask: Task<Void, Never>?
 
     private init() {}
 
@@ -81,24 +111,93 @@ final class LocalSendReceiveService: ObservableObject {
 
     // MARK: - Session lifecycle
 
-    /// Creates a session for a `prepare-upload` request.
+    /// Outcome of a `prepare-upload`, mapped to the HTTP contract by the caller.
+    enum PrepareOutcome {
+        case busy
+        case nothingToTransfer
+        case accepted(sessionID: String, tokens: [String: String])
+        case declined
+        case timedOut
+    }
+
+    /// Runs the decision for a `prepare-upload`, then creates the session.
     ///
-    /// Slice 1 accepts every request; the follow-up replaces this with the
-    /// user's decision driven from the notch live activity.
-    func beginSession(
+    /// The default is to ask: the request is published for the notch card and the
+    /// caller awaits the user (or the auto-accept default, or the timeout).
+    func prepare(
         files incoming: [(id: String, name: String, size: Int, sha256: String?)],
+        senderAlias: String,
         senderIP: String
-    ) -> (sessionID: String, tokens: [String: String])? {
+    ) async -> PrepareOutcome {
         if let startedAt = sessionStartedAt, Date().timeIntervalSince(startedAt) > sessionLifetime {
             Logger.log("LocalSend receive: dropping stale session \(sessionID ?? "?")", category: .extensions)
             sessionID = nil
             self.senderIP = nil
             sessionStartedAt = nil
             files = [:]
+            isReceiving = false
         }
-        guard sessionID == nil else { return nil }  // 409 while another session is active
-        guard !incoming.isEmpty else { return (UUID().uuidString, [:]) }  // 204, nothing to transfer
+        guard sessionID == nil, pendingRequest == nil else { return .busy }
+        guard !incoming.isEmpty else { return .nothingToTransfer }
 
+        completionText = nil
+        clearCompletionTask?.cancel()
+
+        let request = LocalSendIncomingRequest(
+            senderAlias: senderAlias.isEmpty ? senderIP : senderAlias,
+            senderIP: senderIP,
+            files: incoming.map { LocalSendIncomingRequest.File(name: $0.name, size: $0.size) }
+        )
+
+        if !Defaults[.localSendAutoAcceptIncoming] {
+            let decision = await awaitDecision(for: request)
+            switch decision {
+            case .declined: return .declined
+            case .timedOut: return .timedOut
+            case .accepted: break
+            }
+        }
+
+        return beginSession(files: incoming, senderIP: senderIP)
+    }
+
+    private enum LocalSendReceiveDecision {
+        case accepted
+        case declined
+        case timedOut
+    }
+
+    private func awaitDecision(for request: LocalSendIncomingRequest) async -> LocalSendReceiveDecision {
+        await withCheckedContinuation { (continuation: CheckedContinuation<LocalSendReceiveDecision, Never>) in
+            decisionContinuation = continuation
+            pendingRequest = request
+            decisionTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64((self?.decisionTimeout ?? 60) * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await MainActor.run { self?.resolveDecision(.timedOut) }
+            }
+        }
+    }
+
+    /// Called by the notch card (and by the timeout).
+    private func resolveDecision(_ decision: LocalSendReceiveDecision) {
+        decisionTimeoutTask?.cancel()
+        decisionTimeoutTask = nil
+        pendingRequest = nil
+        let continuation = decisionContinuation
+        decisionContinuation = nil
+        continuation?.resume(returning: decision)
+    }
+
+    /// Notch card actions.
+    func acceptPendingRequest() { resolveDecision(.accepted) }
+    func declinePendingRequest() { resolveDecision(.declined) }
+
+    /// Creates a session for an accepted `prepare-upload`.
+    private func beginSession(
+        files incoming: [(id: String, name: String, size: Int, sha256: String?)],
+        senderIP: String
+    ) -> PrepareOutcome {
         let id = UUID().uuidString
         var tokens: [String: String] = [:]
         var accepted: [String: LocalSendReceiveFile] = [:]
@@ -120,8 +219,10 @@ final class LocalSendReceiveService: ObservableObject {
         files = accepted
         receivedCount = 0
         receiveProgress = 0
+        isReceiving = true
+        lastReceivedNames = []
         Logger.log("LocalSend receive: session \(id) prepared for \(accepted.count) file(s) from \(senderIP)", category: .extensions)
-        return (id, tokens)
+        return .accepted(sessionID: id, tokens: tokens)
     }
 
     /// Validates an upload against the active session; nil means 403.
@@ -192,10 +293,21 @@ final class LocalSendReceiveService: ObservableObject {
                 self.sessionID = nil
                 self.senderIP = nil
                 self.sessionStartedAt = nil
+                let names = self.lastReceivedNames
+                self.completionText = names.count == 1
+                    ? "Stored \(names[0]) in Downloads"
+                    : "Stored \(names.count) files in Downloads"
+                self.clearCompletionTask?.cancel()
+                self.clearCompletionTask = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { self?.completionText = nil }
+                }
             }
             self.isReceiving = false
             self.receiveProgress = 0
             self.receivedCount += 1
+            self.lastReceivedNames.append(destination.lastPathComponent)
             return destination
         }
 
@@ -330,19 +442,24 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             )
         }
 
-        let prepared: (sessionID: String, tokens: [String: String])? = await MainActor.run {
-            LocalSendReceiveService.shared.beginSession(files: incoming, senderIP: senderIP)
-        }
-        guard let session = prepared else {
+        let alias = ((json["info"] as? [String: Any])?["alias"] as? String) ?? senderIP
+        let outcome = await LocalSendReceiveService.shared.prepare(
+            files: incoming,
+            senderAlias: alias,
+            senderIP: senderIP
+        )
+        switch outcome {
+        case .busy:
             try await send(Self.json(status: 409, payload: ["error": "busy"]))
-            return
-        }
-
-        if session.tokens.isEmpty {
+        case .nothingToTransfer:
             try await send(Self.data(status: 204, body: Data()))
-            return
+        case .declined:
+            try await send(Self.json(status: 403, payload: ["error": "declined"]))
+        case .timedOut:
+            try await send(Self.json(status: 500, payload: ["error": "no-decision"]))
+        case let .accepted(sessionID, tokens):
+            try await send(Self.json(status: 200, payload: ["sessionId": sessionID, "files": tokens]))
         }
-        try await send(Self.json(status: 200, payload: ["sessionId": session.sessionID, "files": session.tokens]))
     }
 
     // MARK: upload
