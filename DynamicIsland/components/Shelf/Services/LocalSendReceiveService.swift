@@ -365,7 +365,7 @@ final class LocalSendReceiveService: ObservableObject {
                     : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
                 self.clearCompletionTask?.cancel()
                 self.clearCompletionTask = Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
                     guard !Task.isCancelled else { return }
                     await MainActor.run { self?.completionText = nil }
                 }
