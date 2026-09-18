@@ -67,6 +67,10 @@ final class LocalSendService: NSObject, ObservableObject {
     // is the only reliable multi-homed path.
     nonisolated(unsafe) private var multicastRecvSocket: Int32 = -1
     nonisolated(unsafe) private var multicastSendSockets: [String: Int32] = [:]  // local IP -> fd
+    /// The interface addresses the sockets above were built for, so a scan can
+    /// notice that the network changed underneath them (DHCP renewal, sleep/wake,
+    /// cable plugged in later).
+    nonisolated(unsafe) private var multicastInterfaceIPs: [String] = []
     nonisolated(unsafe) private var receiveLoopTask: Task<Void, Never>?
     private var registerListener: NWListener?
     private var cleanupTask: Task<Void, Never>?
@@ -153,8 +157,11 @@ final class LocalSendService: NSObject, ObservableObject {
             return
         }
 
+        // Enumerate once so the join loop and the egress loop cannot disagree.
+        let interfaces = Self.discoverableIPv4Interfaces()
+
         var joined = 0
-        for interface in Self.discoverableIPv4Interfaces() {
+        for interface in interfaces {
             var mreq = ip_mreq()
             mreq.imr_multiaddr = ipv4Address(multicastGroupHost)
             mreq.imr_interface = ipv4Address(interface.ip)
@@ -171,7 +178,7 @@ final class LocalSendService: NSObject, ObservableObject {
         multicastRecvSocket = recv
         Logger.log("LocalSend multicast joined on \(joined) interface(s)", category: .extensions)
 
-        for interface in Self.discoverableIPv4Interfaces() {
+        for interface in interfaces {
             let fd = socket(AF_INET, SOCK_DGRAM, 0)
             guard fd >= 0 else { continue }
             // IP_MULTICAST_IF takes a bare in_addr on Darwin (IP_ADD_MEMBERSHIP
@@ -190,6 +197,7 @@ final class LocalSendService: NSObject, ObservableObject {
             setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, 1)
             multicastSendSockets[interface.ip] = fd
         }
+        multicastInterfaceIPs = interfaces.map(\.ip)
     }
 
     nonisolated private func stopMulticastSockets() {
@@ -201,22 +209,29 @@ final class LocalSendService: NSObject, ObservableObject {
             close(fd)
         }
         multicastSendSockets.removeAll()
+        multicastInterfaceIPs = []
     }
 
     /// Reads announcements in a non-blocking loop (20 ms cadence when idle).
     nonisolated private func startReceiveLoop() {
         guard multicastRecvSocket >= 0 else { return }
         let fd = multicastRecvSocket
+        let port = defaultPort
+        receiveLoopTask?.cancel()
         receiveLoopTask = Task.detached(priority: .utility) { [weak self] in
             var buffer = [UInt8](repeating: 0, count: 65_536)
-            let bufferSize = buffer.count
             var source = sockaddr_in()
-            var sourceLen = socklen_t(MemoryLayout<sockaddr_in>.size)
             while !Task.isCancelled, self?.multicastRecvSocket == fd {
-                let count = withUnsafeMutableBytes(of: &buffer) { bufPtr -> Int in
+                var sourceLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+                // Must be the Array method, not the global
+                // `withUnsafeMutableBytes(of: &buffer)`: the global form exposes
+                // only the 8-byte Array header, so recvfrom would write the whole
+                // datagram over this task's stack frame (that crashed the app on
+                // 2026-09-18: SIGSEGV in swift_retain from this closure).
+                let count = buffer.withUnsafeMutableBytes { raw -> Int in
                     withUnsafeMutablePointer(to: &source) { srcPtr in
                         srcPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                            recvfrom(fd, bufPtr.baseAddress, bufferSize, 0, sockPtr, &sourceLen)
+                            recvfrom(fd, raw.baseAddress, raw.count, 0, sockPtr, &sourceLen)
                         }
                     }
                 }
@@ -228,7 +243,7 @@ final class LocalSendService: NSObject, ObservableObject {
                 let senderIP = Self.ipv4String(from: source)
                 let endpoint = NWEndpoint.hostPort(
                     host: .init(senderIP),
-                    port: .init(integerLiteral: NWEndpoint.Port.IntegerLiteralType(53317))
+                    port: .init(integerLiteral: NWEndpoint.Port.IntegerLiteralType(port))
                 )
                 await Task { @MainActor [weak self] in
                     self?.handleIncoming(content: data, endpoint: endpoint)
@@ -254,6 +269,18 @@ final class LocalSendService: NSObject, ObservableObject {
     func refreshDeviceScan() {
         activeRefreshTask?.cancel()
         startDiscovery()
+
+        // startDiscovery() early-returns while discovery is running, so the
+        // sockets would otherwise keep bindings for interfaces that no longer
+        // exist (DHCP renewal, sleep/wake, cable plugged in after the picker
+        // opened). Rebuild them when the interface set changed.
+        let interfaceIPs = Self.discoverableIPv4Interfaces().map(\.ip)
+        if isStarted, interfaceIPs != multicastInterfaceIPs {
+            Logger.log("LocalSend rebuilding multicast sockets for \(interfaceIPs.count) interface(s)", category: .extensions)
+            startMulticastSockets()
+            startReceiveLoop()
+            sendAnnouncement()
+        }
 
         let sessionID = UUID()
         refreshSessionID = sessionID
@@ -293,7 +320,7 @@ final class LocalSendService: NSObject, ObservableObject {
         }
     }
 
-    /// Tears down discovery (multicast group, TCP listener, periodic loops).
+    /// Tears down discovery (multicast sockets, TCP listener, periodic loops).
     /// Safe to call when not started. Next startDiscovery() re-creates everything.
     func stopDiscovery() {
         cancelIdleStop()
@@ -320,13 +347,17 @@ final class LocalSendService: NSObject, ObservableObject {
 
     /// Arms the idle timer only when nothing meaningful is in flight.
     private func scheduleIdleStopIfIdle() {
-        guard isStarted else { return }
-        guard !isSending, !isRefreshing, devices.isEmpty else { return }
-        idleStopTask?.cancel()
+        // Cancel first: an already-armed timer must not survive a call that
+        // decides discovery is still needed (otherwise it fires 60 s later and
+        // tears the sockets down while the picker is open with devices listed).
+        cancelIdleStop()
+        guard isStarted, !isSending, !isRefreshing, devices.isEmpty else { return }
         idleStopTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: self?.idleStopIntervalNanos ?? 60_000_000_000)
-            guard !Task.isCancelled else { return }
-            self?.stopDiscovery()
+            guard !Task.isCancelled, let self else { return }
+            // Re-check: something may have started while the timer ran.
+            guard !self.isSending, !self.isRefreshing, self.devices.isEmpty else { return }
+            self.stopDiscovery()
             Logger.log("LocalSend discovery stopped after idle", category: .extensions)
         }
     }
@@ -617,8 +648,10 @@ final class LocalSendService: NSObject, ObservableObject {
             .map { "\(prefix).\($0)" }
     }
 
-    /// Interface names that never carry useful LAN discovery traffic.
-    private static let excludedInterfacePrefixes = ["utun", "awdl", "llw", "lo", "ap", "bridge", "vmnet"]
+    /// Interface names that never carry useful LAN discovery traffic. Bridged
+    /// interfaces are deliberately absent: macOS Internet Sharing puts the LAN
+    /// side on `bridge100`/`ap1`, which is exactly where hotspot clients live.
+    private static let excludedInterfacePrefixes = ["utun", "awdl", "llw", "lo", "vmnet"]
 
     /// All usable local IPv4s (UP, non-loopback, non-link-local) with their
     /// interface names, excluding tunnels and Apple internal interfaces.
@@ -748,14 +781,17 @@ final class LocalSendService: NSObject, ObservableObject {
                 rejectedDeviceIDs.insert(selectedDeviceID)
                 transferState = .rejected(deviceID: selectedDeviceID)
             } else {
-                transferState = .failed(transferFailureMessage(for: error, target: selectedTarget))
+                transferState = .failed(error.localizedDescription)
             }
             await finishSending(startedAt: startedAt, success: false)
             throw error
         } catch {
-            transferState = .failed(transferFailureMessage(for: error, target: selectedTarget))
+            let message = transferFailureMessage(for: error, target: selectedTarget)
+            transferState = .failed(message)
             await finishSending(startedAt: startedAt, success: false)
-            throw error
+            // Callers alert on the thrown error, so give them the mapped text
+            // rather than the raw "network connection was interrupted".
+            throw message == error.localizedDescription ? error : LocalSendTransferFailure(message: message)
         }
     }
 
@@ -812,14 +848,24 @@ final class LocalSendService: NSObject, ObservableObject {
         dest.sin_family = sa_family_t(AF_INET)
         dest.sin_port = in_port_t(defaultPort).bigEndian
         dest.sin_addr = ipv4Address(multicastGroupHost)
+        var failures = 0
+        var sockets = 0
         withUnsafePointer(to: &dest) { destPtr in
             destPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
                 data.withUnsafeBytes { raw in
                     for fd in multicastSendSockets.values where fd >= 0 {
-                        _ = sendto(fd, raw.baseAddress, raw.count, 0, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                        sockets += 1
+                        if sendto(fd, raw.baseAddress, raw.count, 0, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size)) < 0 {
+                            failures += 1
+                        }
                     }
                 }
             }
+        }
+        // A stale IP_MULTICAST_IF (interface changed underneath us) shows up here
+        // and nowhere else, so surface the total failure instead of swallowing it.
+        if sockets == 0 || failures == sockets {
+            Logger.log("LocalSend announcement failed on \(failures)/\(sockets) socket(s) (errno \(errno))", category: .extensions)
         }
     }
 
@@ -1272,18 +1318,27 @@ final class LocalSendService: NSObject, ObservableObject {
     /// A TLS failure against an HTTPS peer used to surface as the generic "the
     /// network connection was interrupted", which sends everyone looking at the
     /// network instead of at the receiver. Encrypted LocalSend peers require a
-    /// client certificate, so say that instead.
+    /// client certificate, so say that instead. Only TLS-shaped failures are
+    /// mapped — plain reachability errors keep their own description.
     private func transferFailureMessage(for error: Error, target: LocalSendDeviceInfo?) -> String {
         guard let target, target.https else { return error.localizedDescription }
         let nsError = error as NSError
         guard nsError.domain == NSURLErrorDomain else { return error.localizedDescription }
         switch URLError.Code(rawValue: nsError.code) {
-        case .networkConnectionLost, .secureConnectionFailed, .cannotConnectToHost, .timedOut:
+        case .networkConnectionLost, .secureConnectionFailed, .clientCertificateRejected:
             return "\(target.alias) uses LocalSend encryption (HTTPS) and the encrypted handshake did not complete. Turn off “Encryption” on that device (Settings → Network) or make sure Atoll can create its client certificate."
         default:
             return error.localizedDescription
         }
     }
+}
+
+/// Carries the user-facing text for a failed transfer. `send(items:)` throws this
+/// when the raw `URLError` description would mislead, because the callers alert
+/// with `error.localizedDescription` (see `QuickShareService`).
+private struct LocalSendTransferFailure: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
 }
 
 private class LocalSendTLSDelegate: NSObject, URLSessionDelegate {
@@ -1292,8 +1347,10 @@ private class LocalSendTLSDelegate: NSObject, URLSessionDelegate {
         if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodClientCertificate {
             guard let identity = LocalSendIdentity.identity() else { return (.performDefaultHandling, nil) }
             var certificate: SecCertificate?
-            SecIdentityCopyCertificate(identity, &certificate)
-            return (.useCredential, URLCredential(identity: identity, certificates: certificate.map { [$0] }, persistence: .none))
+            guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess, let certificate else {
+                return (.performDefaultHandling, nil)
+            }
+            return (.useCredential, URLCredential(identity: identity, certificates: [certificate], persistence: .none))
         }
         if let trust = challenge.protectionSpace.serverTrust {
             return (.useCredential, URLCredential(trust: trust))
@@ -1313,11 +1370,17 @@ private enum LocalSendIdentity {
     private static let passphrase = "atoll-localsend"
     private static let lock = NSLock()
     private static var cached: SecIdentity?
+    /// Set once an attempt has been made, so a failing generation (missing
+    /// openssl, unusable p12) is not retried with three subprocesses on every
+    /// single handshake.
+    private static var didAttempt = false
 
     static func identity() -> SecIdentity? {
         lock.lock()
         defer { lock.unlock() }
         if let cached { return cached }
+        guard !didAttempt else { return nil }
+        didAttempt = true
         let identity = load() ?? generate()
         cached = identity
         return identity
@@ -1344,12 +1407,15 @@ private enum LocalSendIdentity {
             // Keep the identity in memory instead of adding it to the login keychain.
             options[kSecImportToMemoryOnly as String] = true
         }
+        // On macOS 14 and older the identity is imported into the default
+        // keychain, which is the only path available there.
 
         var items: CFArray?
-        guard SecPKCS12Import(data as CFData, options as CFDictionary, &items) == errSecSuccess,
+        let status = SecPKCS12Import(data as CFData, options as CFDictionary, &items)
+        guard status == errSecSuccess,
               let imported = items as? [[String: Any]]
         else {
-            Logger.log("LocalSend client identity could not be read from the stored p12", category: .extensions)
+            Logger.log("LocalSend client identity could not be read from the stored p12 (OSStatus \(status))", category: .extensions)
             return nil
         }
 
