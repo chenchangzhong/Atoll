@@ -911,10 +911,11 @@ final class LocalSendService: NSObject, ObservableObject {
                 }
             }
 
-            listener.newConnectionHandler = { [weak self] connection in
-                Task { @MainActor in
-                    self?.handleRegisterConnection(connection)
-                }
+            // Every connection is served by the receive service's HTTP router: it
+            // streams uploads straight to disk and delegates register/info back
+            // here (a single `receive` used to truncate segmented requests).
+            listener.newConnectionHandler = { connection in
+                LocalSendReceiveService.shared.accept(connection)
             }
 
             listener.start(queue: .global(qos: .utility))
@@ -924,24 +925,8 @@ final class LocalSendService: NSObject, ObservableObject {
         }
     }
 
-    private func handleRegisterConnection(_ connection: NWConnection) {
-        connection.start(queue: .global(qos: .utility))
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 131_072) { [weak self] content, _, _, _ in
-            guard let self, let data = content, !data.isEmpty else {
-                connection.cancel()
-                return
-            }
-
-            Task { @MainActor in
-                let response = self.processRegisterRequest(data: data, from: connection.endpoint)
-                connection.send(content: response, completion: .contentProcessed { _ in
-                    connection.cancel()
-                })
-            }
-        }
-    }
-
-    private func processRegisterRequest(data: Data, from endpoint: NWEndpoint) -> Data {
+    /// Answers a fully read request that the receive service routed here.
+    func registerResponse(forRequest data: Data, from endpoint: NWEndpoint) -> Data {
         guard let request = String(data: data, encoding: .utf8) else {
             return httpResponse(status: 400, json: ["error": "invalid-request"])
         }
