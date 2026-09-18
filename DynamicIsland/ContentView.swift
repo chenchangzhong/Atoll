@@ -49,6 +49,15 @@ struct ContentView: View {
     @ObservedObject var localSendService = LocalSendService.shared
     @ObservedObject var localSendReceiveService = LocalSendReceiveService.shared
     @State private var localSendReceiveSuppressionToken = UUID()
+    /// True only while the receive flow is the reason the notch is open.
+    @State private var notchOpenedForReceive = false
+
+    /// The notch shows the receive card while any of these hold.
+    private var isReceiveUIActive: Bool {
+        localSendReceiveService.pendingRequest != nil
+            || localSendReceiveService.isReceiving
+            || localSendReceiveService.completionText != nil
+    }
     @State private var downloadManager = DownloadManager.shared
     @ObservedObject var shelfState = ShelfStateViewModel.shared
     
@@ -887,25 +896,41 @@ struct ContentView: View {
                       .transition(tabSwitchTransition)
                   }
               }
-              .onChange(of: vm.isAutoCloseSuppressed) { _, suppressed in
-                  // Esc or the lock screen can drop the token; a request that is
-                  // still waiting must keep the notch open.
-                  if !suppressed, localSendReceiveService.pendingRequest != nil {
+              .onChange(of: isReceiveUIActive) { _, active in
+                  if active {
+                      // The user chose to be told about incoming files, so open
+                      // the notch rather than waiting for a hover — and keep it
+                      // open until the decision is made, or moving the mouse
+                      // away would hide the prompt while the sender is waiting.
                       vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
-                  }
-              }
-              .onChange(of: localSendReceiveService.pendingRequest) { _, request in
-                  // The user chose to be told about incoming files, so open the
-                  // notch rather than waiting for a hover — and keep it open
-                  // until the decision is made, or moving the mouse away would
-                  // hide the prompt while the sender is still waiting.
-                  if request != nil {
-                      vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
-                      withAnimation(.smooth(duration: 0.3)) {
-                          vm.open()
+                      if vm.notchState == .closed {
+                          notchOpenedForReceive = true
+                          withAnimation(.smooth(duration: 0.3)) {
+                              vm.open()
+                          }
                       }
                   } else {
                       vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
+                      // Closing has to be explicit: the notch normally collapses
+                      // on a mouse-exit event, and a programmatic open never
+                      // generates one, so a declined or timed-out request used to
+                      // leave the notch expanded.
+                      if notchOpenedForReceive {
+                          notchOpenedForReceive = false
+                          if !isHovering, !shouldPreventAutoClose() {
+                              withAnimation(.smooth(duration: 0.25)) {
+                                  vm.close()
+                              }
+                          } else {
+                          }
+                      }
+                  }
+              }
+              .onChange(of: vm.isAutoCloseSuppressed) { _, suppressed in
+                  // Esc or the lock screen can drop the token; a request that is
+                  // still waiting must keep the notch open.
+                  if !suppressed, isReceiveUIActive {
+                      vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
                   }
               }
               .zIndex(1)
