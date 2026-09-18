@@ -530,7 +530,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         guard let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let rawFiles = json["files"] as? [String: Any]
         else {
-            try await send(Self.json(status: 400, payload: ["error": "invalid-body"]))
+            try await send(Self.json(status: 400, payload: ["message": "Invalid body"]))
             return
         }
 
@@ -553,13 +553,13 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         )
         switch outcome {
         case .busy:
-            try await send(Self.json(status: 409, payload: ["error": "busy"]))
+            try await send(Self.json(status: 409, payload: ["message": "Another session is active"]))
         case .emptyFiles:
             try await send(Self.json(status: 400, payload: ["message": "No files provided"]))
         case .declined:
-            try await send(Self.json(status: 403, payload: ["error": "declined"]))
+            try await send(Self.json(status: 403, payload: ["message": "Rejected"]))
         case .timedOut:
-            try await send(Self.json(status: 500, payload: ["error": "no-decision"]))
+            try await send(Self.json(status: 500, payload: ["message": "Internal server error"]))
         case let .accepted(sessionID, tokens):
             try await send(Self.json(status: 200, payload: ["sessionId": sessionID, "files": tokens]))
         }
@@ -572,7 +572,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
               let fileID = request.query["fileId"],
               let token = request.query["token"]
         else {
-            try await send(Self.json(status: 400, payload: ["error": "missing-parameters"]))
+            try await send(Self.json(status: 400, payload: ["message": "Missing parameters"]))
             return
         }
 
@@ -592,7 +592,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             )
         }
         guard let file else {
-            try await send(Self.json(status: 403, payload: ["error": "invalid-token"]))
+            try await send(Self.json(status: 403, payload: ["message": "Invalid token"]))
             return
         }
 
@@ -604,12 +604,18 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         } else if let length = request.contentLength, length <= maximum {
             reader = LocalSendStreamingBody(connection: self, length: length)
         } else {
-            try await send(Self.json(status: 400, payload: ["error": "missing-length"]))
+            try await send(Self.json(status: 400, payload: ["message": "Missing content length"]))
             return
         }
         let failure = await LocalSendReceiveService.shared.receiveUpload(file: file, body: reader)
         if let failure {
-            try await send(Self.json(status: failure.statusCode, payload: ["error": "upload-failed"]))
+            let message: String
+            switch failure {
+            case .unprocessable: message = "Content hash mismatch"
+            case .badRequest: message = "Invalid body"
+            default: message = "Internal server error"
+            }
+            try await send(Self.json(status: failure.statusCode, payload: ["message": message]))
         } else {
             try await send(Self.data(status: 200, body: Data()))
         }
@@ -751,7 +757,6 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         let reason: String
         switch status {
         case 200: reason = "OK"
-        case 204: reason = "No Content"
         case 400: reason = "Bad Request"
         case 403: reason = "Forbidden"
         case 409: reason = "Conflict"
