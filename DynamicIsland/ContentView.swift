@@ -49,8 +49,11 @@ struct ContentView: View {
     @ObservedObject var localSendService = LocalSendService.shared
     @ObservedObject var localSendReceiveService = LocalSendReceiveService.shared
     @State private var localSendReceiveSuppressionToken = UUID()
-    /// True only while the receive flow is the reason the notch is open.
-    @State private var notchOpenedForReceive = false
+    /// True while the receive flow owns the notch: set when it shows a prompt —
+    /// whether it opened the notch itself or found it already open — and cleared
+    /// when the flow ends. A fully automatic transfer owns nothing, so it never
+    /// closes a notch the user opened for something else.
+    @State private var receiveOwnsNotch = false
 
     /// The notch shows the receive card while any of these hold.
     private var isReceiveUIActive: Bool {
@@ -902,9 +905,9 @@ struct ContentView: View {
                   // must not pop the notch open for someone who asked not to be
                   // asked.
                   guard request != nil else { return }
+                  receiveOwnsNotch = true
                   vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
                   if vm.notchState == .closed {
-                      notchOpenedForReceive = true
                       withAnimation(.smooth(duration: 0.3)) {
                           vm.open()
                       }
@@ -919,13 +922,13 @@ struct ContentView: View {
                   } else {
                       vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
                       // Closing has to be explicit: the notch normally collapses
-                      // on a mouse-exit event, and a programmatic open never
-                      // generates one, so a declined, timed-out or completed
-                      // request used to leave the notch expanded. Only a notch this
-                      // flow opened is handed back, unless the user is pointing at
-                      // it or another feature is holding it open.
-                      if notchOpenedForReceive {
-                          notchOpenedForReceive = false
+                      // on a mouse-exit event, and a prompt never generates one, so
+                      // an answered, declined or completed request used to leave the
+                      // notch expanded — whether or not the notch was already open
+                      // when the prompt appeared. Unless the user is pointing at it
+                      // or another feature is holding it open.
+                      if receiveOwnsNotch {
+                          receiveOwnsNotch = false
                           if !isHovering, !shouldPreventAutoClose() {
                               withAnimation(.smooth(duration: 0.25)) {
                                   vm.close()
