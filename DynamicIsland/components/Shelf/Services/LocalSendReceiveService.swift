@@ -280,7 +280,13 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     }
 
     private func serve() async throws {
-        guard let head = try await readHead(), let request = LocalSendHTTPRequest(head: head) else { return }
+        guard let head = try await readHead() else { return }
+        guard let request = LocalSendHTTPRequest(head: head) else {
+            // Worth knowing about: it means we answered nothing to a peer.
+            let firstLine = String(data: head.prefix(80), encoding: .utf8) ?? "<binary>"
+            Logger.log("LocalSend receive: unparsable request head \(firstLine)", category: .extensions)
+            return
+        }
 
         switch (request.method, request.path) {
         case ("POST", "/api/localsend/v2/prepare-upload"):
@@ -344,15 +350,9 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     private func handleUpload(_ request: LocalSendHTTPRequest) async throws {
         guard let sessionID = request.query["sessionId"],
               let fileID = request.query["fileId"],
-              let token = request.query["token"],
-              let length = request.contentLength
+              let token = request.query["token"]
         else {
             try await send(Self.json(status: 400, payload: ["error": "missing-parameters"]))
-            return
-        }
-
-        guard length <= Self.maximumUploadSize else {
-            try await send(Self.json(status: 400, payload: ["error": "too-large"]))
             return
         }
 
@@ -370,7 +370,16 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             return
         }
 
-        let reader = LocalSendStreamingBody(connection: self, length: length)
+        let maximum = file.size > 0 ? file.size : Self.maximumUploadSize
+        let reader: any LocalSendHTTPBody
+        if request.isChunked {
+            reader = LocalSendChunkedBody(connection: self, maximumBytes: maximum)
+        } else if let length = request.contentLength, length <= maximum {
+            reader = LocalSendStreamingBody(connection: self, length: length)
+        } else {
+            try await send(Self.json(status: 400, payload: ["error": "missing-length"]))
+            return
+        }
         let failure = await LocalSendReceiveService.shared.receiveUpload(file: file, body: reader)
         if let failure {
             try await send(Self.json(status: failure.statusCode, payload: ["error": "upload-failed"]))
@@ -395,8 +404,24 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         }
     }
 
+    /// Reads one CRLF-terminated line (chunk headers and their trailers).
+    func readLine(maximum: Int) async throws -> String {
+        while true {
+            if let range = buffered.range(of: Data("\r\n".utf8)) {
+                let lineData = buffered.subdata(in: buffered.startIndex ..< range.lowerBound)
+                buffered.removeSubrange(buffered.startIndex ..< range.upperBound)
+                guard let line = String(data: lineData, encoding: .utf8) else {
+                    throw LocalSendHTTPError.malformedChunk
+                }
+                return line
+            }
+            if buffered.count > maximum { throw LocalSendHTTPError.malformedChunk }
+            guard try await fill() else { throw LocalSendHTTPError.truncatedBody }
+        }
+    }
+
     /// Reads exactly `count` bytes, using anything already buffered first.
-    private func readExactly(_ count: Int) async throws -> Data {
+    func readExactly(_ count: Int) async throws -> Data {
         guard count > 0 else { return Data() }
         var result = Data()
         result.reserveCapacity(count)
@@ -487,6 +512,41 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
 private enum LocalSendHTTPError: Error {
     case headTooLarge
     case truncatedBody
+    case malformedChunk
+    case tooLarge
+}
+
+/// Decodes `Transfer-Encoding: chunked`, which is what LocalSend's senders use
+/// when they stream a file without knowing its length up front.
+private final class LocalSendChunkedBody: LocalSendHTTPBody, @unchecked Sendable {
+    private let source: LocalSendHTTPConnection
+    private let maximumBytes: Int
+    private var delivered = 0
+    private var finished = false
+
+    init(connection: LocalSendHTTPConnection, maximumBytes: Int) {
+        source = connection
+        self.maximumBytes = maximumBytes
+    }
+
+    func nextChunk() async throws -> Data? {
+        guard !finished else { return nil }
+        let header = try await source.readLine(maximum: 1024)
+        let sizeText = header.split(separator: ";").first.map(String.init) ?? ""
+        guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16), size >= 0 else {
+            throw LocalSendHTTPError.malformedChunk
+        }
+        if size == 0 {
+            _ = try? await source.readLine(maximum: 8 * 1024)  // optional trailer
+            finished = true
+            return nil
+        }
+        delivered += size
+        guard delivered <= maximumBytes else { throw LocalSendHTTPError.tooLarge }
+        let data = try await source.readExactly(size)
+        _ = try await source.readLine(maximum: 16)  // CRLF that follows the data
+        return data
+    }
 }
 
 private struct LocalSendHTTPRequest {
@@ -494,6 +554,9 @@ private struct LocalSendHTTPRequest {
     let path: String
     let query: [String: String]
     let contentLength: Int?
+    /// Senders streaming a file (the phones do) use chunked framing instead of a
+    /// declared length.
+    let isChunked: Bool
 
     init?(head: Data) {
         guard let text = String(data: head, encoding: .utf8),
@@ -517,10 +580,11 @@ private struct LocalSendHTTPRequest {
         }
         query = parsed
 
-        contentLength = text
-            .components(separatedBy: "\r\n")
+        let headerLines = text.components(separatedBy: "\r\n")
+        contentLength = headerLines
             .first { $0.lowercased().hasPrefix("content-length:") }
             .flatMap { Int($0.split(separator: ":").dropFirst().joined().trimmingCharacters(in: .whitespaces)) }
+        isChunked = headerLines.contains { $0.lowercased().hasPrefix("transfer-encoding:") && $0.lowercased().contains("chunked") }
     }
 }
 

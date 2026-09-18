@@ -122,10 +122,9 @@ final class LocalSendDevicePickerWindowManager {
         window = nil
         onDeviceSelected = nil
         onDismiss = nil
-        // Nothing needs discovery once the picker is gone: without this the
-        // multicast sockets, the 8 s announce loop and the 53317 listener stay up
-        // (and hold the port away from other LocalSend instances).
-        LocalSendService.shared.stopDiscovery()
+        // Nothing needs discovery once the picker is gone — unless receiving has
+        // to stay available (shelf enabled + LocalSend selected).
+        LocalSendService.shared.pickerDidHide()
     }
 }
 

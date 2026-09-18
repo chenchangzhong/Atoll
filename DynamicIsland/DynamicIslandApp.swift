@@ -548,7 +548,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         LockScreenLiveActivityWindowManager.shared.configure(viewModel: vm)
         LockScreenManager.shared.configure(viewModel: vm)
-        
+
+        // Keep LocalSend's 53317 server reachable whenever the shelf is enabled
+        // and LocalSend is the selected share provider, so peers can push files
+        // without the user opening the picker first.
+        LocalSendService.shared.startReceiveAvailabilityObservation()
+
         // Migrate legacy progress bar settings
         Defaults.Keys.migrateProgressBarStyle()
         Defaults.Keys.migrateMediaControllerSelection()

@@ -15,6 +15,7 @@ import UniformTypeIdentifiers
 import Darwin
 import CryptoKit
 import Security
+import Combine
 
 struct LocalSendDeviceInfo: Identifiable, Hashable, Sendable {
     let id: String
@@ -85,6 +86,11 @@ final class LocalSendService: NSObject, ObservableObject {
     private var recentProbeIPs: [String] = []
     private var knownPeerIPs: [String] = []
     private var isStarted = false
+    /// While the shelf is enabled and LocalSend is the chosen share provider,
+    /// discovery (listener + multicast + announcements) stays up so peers can
+    /// push files without the user opening the picker first.
+    private var receivePinned = false
+    private var receiveAvailabilityCancellables: Set<AnyCancellable> = []
     private var completionDismissTask: Task<Void, Never>?
     private var idleStopTask: Task<Void, Never>?
     private let idleStopIntervalNanos: UInt64 = 60_000_000_000
@@ -100,6 +106,40 @@ final class LocalSendService: NSObject, ObservableObject {
     
     func clearAllRejectedStatuses() {
         rejectedDeviceIDs.removeAll()
+    }
+
+    /// Starts observing the two settings that decide whether receiving must stay
+    /// available, and applies the current state. Called once at launch.
+    func startReceiveAvailabilityObservation() {
+        receiveAvailabilityCancellables = [
+            Defaults.publisher(.dynamicShelf).sink { [weak self] _ in
+                Task { @MainActor in self?.applyReceiveAvailability() }
+            },
+            Defaults.publisher(.quickShareProvider).sink { [weak self] _ in
+                Task { @MainActor in self?.applyReceiveAvailability() }
+            },
+        ]
+        applyReceiveAvailability()
+    }
+
+    private func applyReceiveAvailability() {
+        let wanted = Defaults[.dynamicShelf] && Defaults[.quickShareProvider] == "LocalSend"
+        guard wanted != receivePinned else { return }
+        receivePinned = wanted
+        if wanted {
+            Logger.log("LocalSend receive: server pinned on (shelf enabled + LocalSend selected)", category: .extensions)
+            startDiscovery()
+            scheduleIdleStopIfIdle()
+        } else {
+            Logger.log("LocalSend receive: server pin released", category: .extensions)
+            stopDiscovery()
+        }
+    }
+
+    /// The picker disappeared: stop discovery unless receiving must stay available.
+    func pickerDidHide() {
+        guard !receivePinned else { return }
+        stopDiscovery()
     }
 
     func startDiscovery() {
@@ -415,11 +455,11 @@ final class LocalSendService: NSObject, ObservableObject {
     /// (The picker stops discovery directly when it hides.)
     private func scheduleIdleStopIfIdle() {
         cancelIdleStop()
-        guard isStarted else { return }
+        guard isStarted, !receivePinned else { return }
         idleStopTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: self?.idleStopIntervalNanos ?? 60_000_000_000)
             guard !Task.isCancelled, let self else { return }
-            guard !self.isSending, !self.isRefreshing, self.devices.isEmpty else {
+            guard !self.isSending, !self.isRefreshing, self.devices.isEmpty, !self.receivePinned else {
                 self.scheduleIdleStopIfIdle()
                 return
             }
