@@ -71,9 +71,9 @@ final class LocalSendService: NSObject, ObservableObject {
     /// notice that the network changed underneath them (DHCP renewal, sleep/wake,
     /// cable plugged in later).
     nonisolated(unsafe) private var multicastInterfaceIPs: [String] = []
-    /// Bumped every time the sockets are (re)created. The receive loop only
-    /// serves the generation it started with, so a recycled file descriptor
-    /// cannot keep a stale loop alive after a rebuild.
+    /// Bumped when the sockets are (re)created, when they are torn down, and when
+    /// a receive loop starts. Each loop only serves the generation it captured,
+    /// so a closed or recycled descriptor can never keep a stale loop alive.
     nonisolated(unsafe) private var multicastGeneration: UInt64 = 0
     nonisolated(unsafe) private var receiveLoopTask: Task<Void, Never>?
     private var registerListener: NWListener?
@@ -106,8 +106,8 @@ final class LocalSendService: NSObject, ObservableObject {
         cancelIdleStop()
         guard !isStarted else { return }
         isStarted = true
-        // If nothing ever happens (no picker refresh, no transfer), tear
-        // everything down again after the idle interval.
+        // Arm the idle watchdog; it re-arms itself while discovery is still
+        // wanted, so an unused session tears down after the idle interval.
         scheduleIdleStopIfIdle()
 
         startRegisterListenerIfNeeded()
@@ -216,7 +216,9 @@ final class LocalSendService: NSObject, ObservableObject {
             }
         }
 
-        // Make the receive loop responsive to teardown.
+        // Non-blocking so recvfrom cannot block on its own; the receive loop is
+        // torn down by the 200 ms poll timeout plus the generation check (closing
+        // the fd does not wake a blocked poll on macOS).
         let flags = fcntl(recv, F_GETFL, 0)
         _ = fcntl(recv, F_SETFL, flags | O_NONBLOCK)
         multicastRecvSocket = recv
@@ -245,6 +247,9 @@ final class LocalSendService: NSObject, ObservableObject {
         guard multicastRecvSocket >= 0 else { return }
         let fd = multicastRecvSocket
         let port = defaultPort
+        // Each loop owns a fresh generation, so two loops can never poll the same
+        // socket even if a future call site forgets to rebuild first.
+        multicastGeneration &+= 1
         let generation = multicastGeneration
         receiveLoopTask?.cancel()
         receiveLoopTask = Task.detached(priority: .utility) { [weak self] in
@@ -262,7 +267,19 @@ final class LocalSendService: NSObject, ObservableObject {
                     if errno == EINTR { continue }
                     break
                 }
-                guard ready > 0, descriptor.revents & Int16(POLLIN) != 0 else { continue }
+                if descriptor.revents & Int16(POLLNVAL) != 0 { break }
+                guard ready > 0, descriptor.revents & Int16(POLLIN) != 0 else {
+                    // Error/hangup with no data would keep poll returning at once;
+                    // treat it as the end of this socket instead of spinning.
+                    if descriptor.revents & (Int16(POLLERR) | Int16(POLLHUP)) != 0 { break }
+                    continue
+                }
+                // Re-check after waking: the loop may have been superseded while
+                // poll was blocked (closing the fd does not wake it).
+                guard !Task.isCancelled,
+                      self?.multicastGeneration == generation,
+                      self?.multicastRecvSocket == fd
+                else { break }
 
                 var sourceLen = socklen_t(MemoryLayout<sockaddr_in>.size)
                 // Must be the Array method, not the global
@@ -312,14 +329,19 @@ final class LocalSendService: NSObject, ObservableObject {
         // startDiscovery() early-returns while discovery is running, so the
         // sockets would otherwise keep bindings for interfaces that no longer
         // exist (DHCP renewal, sleep/wake, cable plugged in after the picker
-        // opened). Rebuild them when the interface set changed.
+        // opened). Rebuild them when the interface set changed, or when the
+        // receive socket never came up (bind failed earlier).
         let interfaceIPs = Self.discoverableIPv4Interfaces().map(\.ip)
-        if isStarted, interfaceIPs != multicastInterfaceIPs {
+        if interfaceIPs != multicastInterfaceIPs || (!interfaceIPs.isEmpty && multicastRecvSocket < 0) {
             Logger.log("LocalSend rebuilding multicast sockets for \(interfaceIPs.count) interface(s)", category: .extensions)
             startMulticastSockets()
             startReceiveLoop()
             sendAnnouncement()
         }
+
+        // The register listener can fail on the first attempt (port already taken,
+        // network not ready) and had no second chance; a scan is a cheap retry.
+        startRegisterListenerIfNeeded()
 
         let sessionID = UUID()
         refreshSessionID = sessionID
@@ -380,22 +402,27 @@ final class LocalSendService: NSObject, ObservableObject {
         registerListener = nil
 
         isRefreshing = false
-        // Keep discoveredByID / knownPeerIPs / recentProbeIPs as a warm cache
-        // so the next picker open can render devices instantly.
+        // Keep discoveredByID / knownPeerIPs / recentProbeIPs so the next picker
+        // open can show the last known devices until the first scan of that
+        // session prunes entries older than its start.
     }
 
-    /// Arms the idle timer only when nothing meaningful is in flight.
+    /// Keeps an idle watchdog armed. It fires after the idle interval and stops
+    /// discovery only when nothing is in flight and no devices are known;
+    /// otherwise it re-arms itself. Cancelling here is deliberate: an armed timer
+    /// must not fire while discovery is still wanted, but simply returning would
+    /// leave *nothing* armed and discovery would then run until the app quits.
+    /// (The picker stops discovery directly when it hides.)
     private func scheduleIdleStopIfIdle() {
-        // Cancel first: an already-armed timer must not survive a call that
-        // decides discovery is still needed (otherwise it fires 60 s later and
-        // tears the sockets down while the picker is open with devices listed).
         cancelIdleStop()
-        guard isStarted, !isSending, !isRefreshing, devices.isEmpty else { return }
+        guard isStarted else { return }
         idleStopTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: self?.idleStopIntervalNanos ?? 60_000_000_000)
             guard !Task.isCancelled, let self else { return }
-            // Re-check: something may have started while the timer ran.
-            guard !self.isSending, !self.isRefreshing, self.devices.isEmpty else { return }
+            guard !self.isSending, !self.isRefreshing, self.devices.isEmpty else {
+                self.scheduleIdleStopIfIdle()
+                return
+            }
             self.stopDiscovery()
             Logger.log("LocalSend discovery stopped after idle", category: .extensions)
         }
@@ -502,10 +529,17 @@ final class LocalSendService: NSObject, ObservableObject {
                 .map { "\(prefix).\($0)" })
         }
 
-        await probeExactIPs(candidates, timeout: timeout, concurrency: 50)
+        // Bound the sweep: several interfaces is ~760 probes, and every refresh
+        // would otherwise rescan every subnet with no upper limit.
+        await probeExactIPs(candidates, timeout: timeout, concurrency: 50, deadline: Date().addingTimeInterval(2.5))
     }
 
-    private func probeExactIPs(_ ips: [String], timeout: TimeInterval, concurrency: Int) async {
+    private func probeExactIPs(
+        _ ips: [String],
+        timeout: TimeInterval,
+        concurrency: Int,
+        deadline: Date? = nil
+    ) async {
         let port = defaultPort
         let unique = Array(NSOrderedSet(array: ips).compactMap { $0 as? String })
         guard !unique.isEmpty else { return }
@@ -521,6 +555,11 @@ final class LocalSendService: NSObject, ObservableObject {
             }
 
             while let result = await group.next() {
+                if let deadline, Date() > deadline {
+                    group.cancelAll()
+                    return
+                }
+
                 guard !Task.isCancelled else {
                     group.cancelAll()
                     return
@@ -760,12 +799,15 @@ final class LocalSendService: NSObject, ObservableObject {
             await finishSending(startedAt: startedAt, success: false)
             throw error
         } catch {
-            let message = transferFailureMessage(for: error, target: selectedTarget)
-            transferState = .failed(message)
-            await finishSending(startedAt: startedAt, success: false)
-            // Callers alert on the thrown error, so give them the mapped text
+            // Callers alert on the thrown error, so hand them the mapped text
             // rather than the raw "network connection was interrupted".
-            throw message == error.localizedDescription ? error : LocalSendTransferFailure(message: message)
+            let mapped = transferFailureMessage(for: error, target: selectedTarget)
+            transferState = .failed(mapped ?? error.localizedDescription)
+            await finishSending(startedAt: startedAt, success: false)
+            if let mapped {
+                throw LocalSendTransferFailure(message: mapped)
+            }
+            throw error
         }
     }
 
@@ -837,8 +879,12 @@ final class LocalSendService: NSObject, ObservableObject {
             }
         }
         // A stale IP_MULTICAST_IF (interface changed underneath us) shows up here
-        // and nowhere else, so surface the total failure instead of swallowing it.
-        if sockets == 0 || failures == sockets {
+        // and nowhere else, so surface it instead of swallowing it.
+        if sockets == 0 {
+            Logger.log("LocalSend announcement skipped: no multicast send socket", category: .extensions)
+        } else if failures == sockets {
+            Logger.log("LocalSend announcement failed on all \(sockets) socket(s) (errno \(errno))", category: .extensions)
+        } else if failures > 0 {
             Logger.log("LocalSend announcement failed on \(failures)/\(sockets) socket(s) (errno \(errno))", category: .extensions)
         }
     }
@@ -1012,14 +1058,12 @@ final class LocalSendService: NSObject, ObservableObject {
 
         if fingerprint == "atoll.localsend.bridge" { return }
 
-        let ip: String
-        if let announced = json["ip"] as? String {
-            ip = announced
-        } else if case let .hostPort(host, _) = endpoint {
-            ip = host.debugDescription.replacingOccurrences(of: "\"", with: "")
-        } else {
-            return
-        }
+        // Trust only the source address: upstream announcements carry no "ip"
+        // field (checked against LocalSend v1.18.2's DTOs), so honouring one would
+        // just let a peer point us at a different host.
+        guard case let .hostPort(host, _) = endpoint else { return }
+        let ip = host.debugDescription.replacingOccurrences(of: "\"", with: "")
+        guard isValidIPv4(ip) else { return }
 
         let port = (json["port"] as? Int) ?? defaultPort
         let https = (json["protocol"] as? String) == "https"
@@ -1320,20 +1364,21 @@ final class LocalSendService: NSObject, ObservableObject {
         URLSession(configuration: .default, delegate: LocalSendTLSDelegate(), delegateQueue: nil)
     }()
 
-    /// A TLS failure against an HTTPS peer used to surface as the generic "the
-    /// network connection was interrupted", which sends everyone looking at the
-    /// network instead of at the receiver. Encrypted LocalSend peers require a
-    /// client certificate, so say that instead. Only TLS-shaped failures are
-    /// mapped — plain reachability errors keep their own description.
-    private func transferFailureMessage(for error: Error, target: LocalSendDeviceInfo?) -> String {
-        guard let target, target.https else { return error.localizedDescription }
+    /// Text for a failure against an encrypted peer that the raw `URLError`
+    /// description explains badly, or nil when the raw description should stand.
+    /// Only TLS-shaped codes are mapped: a plain reachability error keeps its own
+    /// wording, and reliability-only failures are not blamed on encryption.
+    private func transferFailureMessage(for error: Error, target: LocalSendDeviceInfo?) -> String? {
+        guard let target, target.https else { return nil }
         let nsError = error as NSError
-        guard nsError.domain == NSURLErrorDomain else { return error.localizedDescription }
+        guard nsError.domain == NSURLErrorDomain else { return nil }
         switch URLError.Code(rawValue: nsError.code) {
         case .networkConnectionLost, .secureConnectionFailed, .clientCertificateRejected:
-            return "\(target.alias) uses LocalSend encryption (HTTPS) and the encrypted handshake did not complete. Turn off “Encryption” on that device (Settings → Network) or make sure Atoll can create its client certificate."
+            return """
+            Could not finish the encrypted handshake with \(target.alias): either its LocalSend encryption rejected Atoll's client certificate, or the connection to it dropped. Turning off “Encryption” on that device (Settings → Network) avoids the certificate path entirely.
+            """
         default:
-            return error.localizedDescription
+            return nil
         }
     }
 }
@@ -1375,24 +1420,27 @@ private enum LocalSendIdentity {
     private static let passphrase = "atoll-localsend"
     private static let lock = NSLock()
     private static var cached: SecIdentity?
-    /// Set once an attempt has been made, so a failing generation (missing
-    /// openssl, unusable p12) is not retried with three subprocesses on every
-    /// single handshake.
-    private static var didAttempt = false
+    /// When the last generation attempt was made. Generating runs three openssl
+    /// subprocesses, so a failure backs off instead of retrying on every
+    /// handshake — but it does retry (a transient failure must not need an app
+    /// relaunch to recover).
+    private static var lastAttempt: Date?
+    private static let attemptCooldown: TimeInterval = 60
 
     static func identity() -> SecIdentity? {
         lock.lock()
         defer { lock.unlock() }
         if let cached { return cached }
         // Reading the stored p12 is cheap and safe to retry, so a transient file
-        // or keychain error does not poison the process; generating a new identity
-        // runs three openssl subprocesses, so that is attempted at most once.
+        // or keychain error does not poison the process.
         if let stored = load() {
             cached = stored
             return stored
         }
-        guard !didAttempt else { return nil }
-        didAttempt = true
+        if let lastAttempt, Date().timeIntervalSince(lastAttempt) < attemptCooldown {
+            return nil
+        }
+        lastAttempt = Date()
         let identity = generate()
         cached = identity
         return identity

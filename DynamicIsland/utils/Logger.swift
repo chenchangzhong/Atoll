@@ -25,7 +25,7 @@ import OSLog
 import SwiftUI
 import Defaults
 
-enum LogCategory: String {
+enum LogCategory: String, CaseIterable {
     case lifecycle = "🔄"
     case memory = "💾"
     case performance = "⚡️"
@@ -69,15 +69,22 @@ struct Logger {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
-    private static var osLoggerCache: [LogCategory: OSLog] = [:]
+    /// Built eagerly and never mutated: `Logger.log` is called from URLSession
+    /// delegate queues as well as from the main actor, so populating this lazily
+    /// (as it used to) was an unsynchronized write to a static dictionary.
+    private static let osLoggerCache: [LogCategory: OSLog] = {
+        var cache: [LogCategory: OSLog] = [:]
+        for category in LogCategory.allCases {
+            cache[category] = OSLog(subsystem: subsystem, category: category.osCategoryName)
+        }
+        return cache
+    }()
 
     private static func osLogger(for category: LogCategory) -> OSLog {
         if let cached = osLoggerCache[category] {
             return cached
         }
-        let logger = OSLog(subsystem: subsystem, category: category.osCategoryName)
-        osLoggerCache[category] = logger
-        return logger
+        return OSLog(subsystem: subsystem, category: category.osCategoryName)
     }
 
     static func log(
