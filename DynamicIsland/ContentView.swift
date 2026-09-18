@@ -913,16 +913,17 @@ struct ContentView: View {
                       vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
                       // Closing has to be explicit: the notch normally collapses
                       // on a mouse-exit event, and a programmatic open never
-                      // generates one, so a declined or timed-out request used to
-                      // leave the notch expanded.
-                      if notchOpenedForReceive {
-                          notchOpenedForReceive = false
-                          if !isHovering, !shouldPreventAutoClose() {
-                              withAnimation(.smooth(duration: 0.25)) {
-                                  vm.close()
-                              }
-                          } else {
+                      // generates one, so a declined, timed-out or completed
+                      // request used to leave the notch expanded. While its card
+                      // was up the receive flow owned the notch, so it hands it
+                      // back — unless the user is pointing at it or another
+                      // feature is holding it open.
+                      notchOpenedForReceive = false
+                      if vm.notchState == .open, !isHovering, !shouldPreventAutoClose() {
+                          withAnimation(.smooth(duration: 0.25)) {
+                              vm.close()
                           }
+                      } else if vm.notchState == .open {
                       }
                   }
               }
