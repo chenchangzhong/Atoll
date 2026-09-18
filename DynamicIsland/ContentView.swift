@@ -54,6 +54,8 @@ struct ContentView: View {
     /// when the flow ends. A fully automatic transfer owns nothing, so it never
     /// closes a notch the user opened for something else.
     @State private var receiveOwnsNotch = false
+    /// Debounces the end of the receive flow (see the `isReceiveUIActive` handler).
+    @State private var receiveEndTask: Task<Void, Never>?
 
     /// The notch shows the receive card while any of these hold.
     private var isReceiveUIActive: Bool {
@@ -914,20 +916,27 @@ struct ContentView: View {
                   }
               }
               .onChange(of: isReceiveUIActive) { _, active in
+                  receiveEndTask?.cancel()
                   if active {
                       // Also covers an automatically accepted transfer: the notch
                       // must not collapse mid-flight just because the sender never
                       // asked a question.
                       vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
                   } else {
-                      vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
-                      // Closing has to be explicit: the notch normally collapses
-                      // on a mouse-exit event, and a prompt never generates one, so
-                      // an answered, declined or completed request used to leave the
-                      // notch expanded — whether or not the notch was already open
-                      // when the prompt appeared. Unless the user is pointing at it
-                      // or another feature is holding it open.
-                      if receiveOwnsNotch {
+                      // Accepting passes through an inactive instant — the session
+                      // is created after the decision resolves — so the end is only
+                      // concluded once the flow has stayed inactive.
+                      receiveEndTask = Task { @MainActor in
+                          try? await Task.sleep(nanoseconds: 500_000_000)
+                          guard !Task.isCancelled, !isReceiveUIActive else { return }
+                          vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
+                          // Closing has to be explicit: the notch normally collapses
+                          // on a mouse-exit event, and a prompt never generates one,
+                          // so an answered, declined or completed request used to
+                          // leave the notch expanded — whether or not the notch was
+                          // already open when the prompt appeared. Unless the user is
+                          // pointing at it or another feature is holding it open.
+                          guard receiveOwnsNotch else { return }
                           receiveOwnsNotch = false
                           if !isHovering, !shouldPreventAutoClose() {
                               withAnimation(.smooth(duration: 0.25)) {
