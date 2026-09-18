@@ -120,6 +120,7 @@ final class LocalSendService: NSObject, ObservableObject {
         cleanupTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
+                guard !Task.isCancelled else { return }
                 self.cleanupStale()
             }
         }
@@ -127,61 +128,24 @@ final class LocalSendService: NSObject, ObservableObject {
         announceTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
+                guard !Task.isCancelled else { return }
                 self.sendAnnouncement()
             }
         }
     }
 
-    /// One receive socket (bound 0.0.0.0:port, joined on every interface) +
-    /// one send socket per interface (IP_MULTICAST_IF scoped).
+    /// One shared receive socket (bound 0.0.0.0:port, joined on every interface)
+    /// + one send socket per interface (IP_MULTICAST_IF scoped). The two halves
+    /// are independent on purpose: announcing has to keep working even when
+    /// 53317 cannot be bound.
     nonisolated private func startMulticastSockets() {
         stopMulticastSockets()
         multicastGeneration &+= 1
 
-        let recv = socket(AF_INET, SOCK_DGRAM, 0)
-        guard recv >= 0 else {
-            Logger.log("LocalSend multicast receive socket creation failed (errno \(errno))", category: .extensions)
-            return
-        }
-
-        var reuse: Int32 = 1
-        setsockopt(recv, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
-
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = in_port_t(defaultPort).bigEndian
-        addr.sin_addr = in_addr(s_addr: INADDR_ANY)
-        let bindResult: Int32 = withUnsafePointer(to: &addr) { addrPtr in
-            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                Darwin.bind(recv, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bindResult == 0 else {
-            Logger.log("LocalSend multicast bind failed (errno \(errno), \(String(cString: strerror(errno))))", category: .extensions)
-            close(recv)
-            return
-        }
-
         // Enumerate once so the join loop and the egress loop cannot disagree.
         let interfaces = Self.discoverableIPv4Interfaces()
 
-        var joined = 0
-        for interface in interfaces {
-            var mreq = ip_mreq()
-            mreq.imr_multiaddr = ipv4Address(multicastGroupHost)
-            mreq.imr_interface = ipv4Address(interface.ip)
-            if setsockopt(recv, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, socklen_t(MemoryLayout<ip_mreq>.size)) == 0 {
-                joined += 1
-            } else {
-                Logger.log("LocalSend multicast join on \(interface.ip) failed (errno \(errno))", category: .extensions)
-            }
-        }
-
-        // Make the receive loop responsive to teardown.
-        let flags = fcntl(recv, F_GETFL, 0)
-        _ = fcntl(recv, F_SETFL, flags | O_NONBLOCK)
-        multicastRecvSocket = recv
-        Logger.log("LocalSend multicast joined on \(joined) interface(s)", category: .extensions)
+        startReceiveSocket(interfaces: interfaces)
 
         for interface in interfaces {
             let fd = socket(AF_INET, SOCK_DGRAM, 0)
@@ -203,6 +167,60 @@ final class LocalSendService: NSObject, ObservableObject {
             multicastSendSockets[interface.ip] = fd
         }
         multicastInterfaceIPs = interfaces.map(\.ip)
+    }
+
+    /// Binds the shared receive socket and joins the multicast group on every
+    /// interface.
+    ///
+    /// `SO_REUSEPORT` is required rather than optional: the official LocalSend
+    /// app binds 53317 with it too, and with `SO_REUSEADDR` alone the bind fails
+    /// with EADDRINUSE whenever another LocalSend instance is already running
+    /// (and vice versa: we would hold the port exclusively and break theirs).
+    /// Trade-off: with REUSEPORT the kernel may hand a *unicast* reply to another
+    /// process sharing the port, while multicast is still delivered to all.
+    nonisolated private func startReceiveSocket(interfaces: [(ip: String, name: String)]) {
+        let recv = socket(AF_INET, SOCK_DGRAM, 0)
+        guard recv >= 0 else {
+            Logger.log("LocalSend multicast receive socket creation failed (errno \(errno))", category: .extensions)
+            return
+        }
+
+        var reuse: Int32 = 1
+        setsockopt(recv, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(recv, SOL_SOCKET, SO_REUSEPORT, &reuse, socklen_t(MemoryLayout<Int32>.size))
+
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(defaultPort).bigEndian
+        addr.sin_addr = in_addr(s_addr: INADDR_ANY)
+        let bindResult: Int32 = withUnsafePointer(to: &addr) { addrPtr in
+            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+                Darwin.bind(recv, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bindResult == 0 else {
+            Logger.log("LocalSend multicast bind failed (errno \(errno), \(String(cString: strerror(errno)))); continuing with announcements only", category: .extensions)
+            close(recv)
+            return
+        }
+
+        var joined = 0
+        for interface in interfaces {
+            var mreq = ip_mreq()
+            mreq.imr_multiaddr = ipv4Address(multicastGroupHost)
+            mreq.imr_interface = ipv4Address(interface.ip)
+            if setsockopt(recv, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, socklen_t(MemoryLayout<ip_mreq>.size)) == 0 {
+                joined += 1
+            } else {
+                Logger.log("LocalSend multicast join on \(interface.ip) failed (errno \(errno))", category: .extensions)
+            }
+        }
+
+        // Make the receive loop responsive to teardown.
+        let flags = fcntl(recv, F_GETFL, 0)
+        _ = fcntl(recv, F_SETFL, flags | O_NONBLOCK)
+        multicastRecvSocket = recv
+        Logger.log("LocalSend multicast joined on \(joined) interface(s)", category: .extensions)
     }
 
     nonisolated private func stopMulticastSockets() {
@@ -244,7 +262,7 @@ final class LocalSendService: NSObject, ObservableObject {
                     if errno == EINTR { continue }
                     break
                 }
-                guard ready > 0, descriptor.revents & Int16(POLLNVAL) == 0 else { continue }
+                guard ready > 0, descriptor.revents & Int16(POLLIN) != 0 else { continue }
 
                 var sourceLen = socklen_t(MemoryLayout<sockaddr_in>.size)
                 // Must be the Array method, not the global
@@ -409,7 +427,7 @@ final class LocalSendService: NSObject, ObservableObject {
             for _ in 0 ..< min(maxConcurrent, candidates.count) {
                 guard let ip = iterator.next() else { break }
                 group.addTask {
-                    await Self.probeDeviceInfo(at: ip, port: port, timeout: 0.14)
+                    await Self.probeDeviceInfo(at: ip, port: port, timeout: timeout)
                 }
             }
 
@@ -579,8 +597,10 @@ final class LocalSendService: NSObject, ObservableObject {
 
     private nonisolated static let probeSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
+        // Per-request timeouts (0.12–0.35 s) are what callers set; the resource
+        // timeout only has to stay above them instead of silently capping them.
         config.timeoutIntervalForRequest = 0.2
-        config.timeoutIntervalForResource = 0.2
+        config.timeoutIntervalForResource = 1.0
         config.waitsForConnectivity = false
         return URLSession(configuration: config, delegate: LocalSendTLSDelegate(), delegateQueue: nil)
     }()
@@ -729,8 +749,11 @@ final class LocalSendService: NSObject, ObservableObject {
             await finishSending(startedAt: startedAt, success: true)
         } catch let error as LocalSendServiceError {
             if case .transferRejected = error {
-                rejectedDeviceIDs.insert(selectedDeviceID)
-                transferState = .rejected(deviceID: selectedDeviceID)
+                // Key the marker off the device actually sent to, not off the
+                // persisted selection (send falls back to devices.first).
+                let rejectedID = selectedTarget?.id ?? selectedDeviceID
+                rejectedDeviceIDs.insert(rejectedID)
+                transferState = .rejected(deviceID: rejectedID)
             } else {
                 transferState = .failed(error.localizedDescription)
             }
@@ -1021,6 +1044,10 @@ final class LocalSendService: NSObject, ObservableObject {
         let cutoff = Date().addingTimeInterval(-30)
         discoveredByID = discoveredByID.filter { $0.value.lastSeen > cutoff }
         refreshDevices()
+        // Pruning can empty the list while nothing else is happening; re-arm the
+        // idle timer here, otherwise discovery (sockets, 8 s announcements, the
+        // 53317 listener) would keep running until the app quits.
+        scheduleIdleStopIfIdle()
     }
 
     private func refreshDevices() {
@@ -1030,11 +1057,30 @@ final class LocalSendService: NSObject, ObservableObject {
         }
     }
 
-    private struct TransferFile {
+    private struct TransferFile: Sendable {
         let id: String
         let name: String
         let mimeType: String
         let data: Data
+    }
+
+    /// Lowercase-hex SHA-256 of every file, computed concurrently off the actor.
+    private nonisolated static func sha256HexDigests(for files: [TransferFile]) async -> [String: String] {
+        await withTaskGroup(of: (String, String).self) { group in
+            for file in files {
+                group.addTask {
+                    let digest = SHA256.hash(data: file.data)
+                        .map { String(format: "%02x", $0) }
+                        .joined()
+                    return (file.id, digest)
+                }
+            }
+            var result: [String: String] = [:]
+            for await (id, digest) in group {
+                result[id] = digest
+            }
+            return result
+        }
     }
 
     private func buildTransferFiles(from items: [Any]) async throws -> [TransferFile] {
@@ -1079,18 +1125,25 @@ final class LocalSendService: NSObject, ObservableObject {
     }
 
     private func prepareUpload(files: [TransferFile], to device: LocalSendDeviceInfo) async throws -> (sessionID: String, fileTokens: [String: String]) {
+        // SHA-256 checksums (protocol v2.2) are computed off the main actor: the
+        // hash runs at a few GB/s, so hashing inline froze the UI for roughly
+        // 0.4 s per GB of payload.
+        let digests = await Self.sha256HexDigests(for: files)
+
         var filesMap: [String: Any] = [:]
         for file in files {
-            // SHA-256 checksum (protocol v2.2): receivers with checksum enabled
-            // verify the uploaded data and respond 422 on mismatch.
-            let sha256 = SHA256.hash(data: file.data).compactMap { String(format: "%02x", $0) }.joined()
-            filesMap[file.id] = [
+            var entry: [String: Any] = [
                 "id": file.id,
                 "fileName": file.name,
                 "size": file.data.count,
                 "fileType": file.mimeType,
-                "sha256": sha256,
             ]
+            // Only claim a checksum we actually computed: receivers that verify it
+            // answer 422 on a mismatch.
+            if let digest = digests[file.id] {
+                entry["sha256"] = digest
+            }
+            filesMap[file.id] = entry
         }
 
         let payload: [String: Any] = [
@@ -1331,9 +1384,16 @@ private enum LocalSendIdentity {
         lock.lock()
         defer { lock.unlock() }
         if let cached { return cached }
+        // Reading the stored p12 is cheap and safe to retry, so a transient file
+        // or keychain error does not poison the process; generating a new identity
+        // runs three openssl subprocesses, so that is attempted at most once.
+        if let stored = load() {
+            cached = stored
+            return stored
+        }
         guard !didAttempt else { return nil }
         didAttempt = true
-        let identity = load() ?? generate()
+        let identity = generate()
         cached = identity
         return identity
     }
