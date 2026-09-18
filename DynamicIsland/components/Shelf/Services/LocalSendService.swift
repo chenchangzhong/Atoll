@@ -71,6 +71,10 @@ final class LocalSendService: NSObject, ObservableObject {
     /// notice that the network changed underneath them (DHCP renewal, sleep/wake,
     /// cable plugged in later).
     nonisolated(unsafe) private var multicastInterfaceIPs: [String] = []
+    /// Bumped every time the sockets are (re)created. The receive loop only
+    /// serves the generation it started with, so a recycled file descriptor
+    /// cannot keep a stale loop alive after a rebuild.
+    nonisolated(unsafe) private var multicastGeneration: UInt64 = 0
     nonisolated(unsafe) private var receiveLoopTask: Task<Void, Never>?
     private var registerListener: NWListener?
     private var cleanupTask: Task<Void, Never>?
@@ -132,6 +136,7 @@ final class LocalSendService: NSObject, ObservableObject {
     /// one send socket per interface (IP_MULTICAST_IF scoped).
     nonisolated private func startMulticastSockets() {
         stopMulticastSockets()
+        multicastGeneration &+= 1
 
         let recv = socket(AF_INET, SOCK_DGRAM, 0)
         guard recv >= 0 else {
@@ -212,16 +217,31 @@ final class LocalSendService: NSObject, ObservableObject {
         multicastInterfaceIPs = []
     }
 
-    /// Reads announcements in a non-blocking loop (20 ms cadence when idle).
+    /// Waits for datagrams on the receive socket (blocking on poll with a 200 ms
+    /// timeout, so an idle socket costs no repeated syscalls).
     nonisolated private func startReceiveLoop() {
         guard multicastRecvSocket >= 0 else { return }
         let fd = multicastRecvSocket
         let port = defaultPort
+        let generation = multicastGeneration
         receiveLoopTask?.cancel()
         receiveLoopTask = Task.detached(priority: .utility) { [weak self] in
             var buffer = [UInt8](repeating: 0, count: 65_536)
             var source = sockaddr_in()
-            while !Task.isCancelled, self?.multicastRecvSocket == fd {
+            while !Task.isCancelled, self?.multicastGeneration == generation {
+                // Block in poll() with a timeout instead of re-calling recvfrom
+                // every 20 ms: one syscall per wakeup. Note that closing the
+                // socket does NOT wake poll() on macOS, so teardown latency is
+                // bounded by this timeout; the generation check above keeps a
+                // stale loop off a recycled descriptor.
+                var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                let ready = poll(&descriptor, 1, 200)
+                if ready < 0 {
+                    if errno == EINTR { continue }
+                    break
+                }
+                guard ready > 0, descriptor.revents & Int16(POLLNVAL) == 0 else { continue }
+
                 var sourceLen = socklen_t(MemoryLayout<sockaddr_in>.size)
                 // Must be the Array method, not the global
                 // `withUnsafeMutableBytes(of: &buffer)`: the global form exposes
@@ -235,10 +255,7 @@ final class LocalSendService: NSObject, ObservableObject {
                         }
                     }
                 }
-                guard count > 0 else {
-                    try? await Task.sleep(nanoseconds: 20_000_000)
-                    continue
-                }
+                guard count > 0 else { continue }
                 let data = Data(buffer.prefix(count))
                 let senderIP = Self.ipv4String(from: source)
                 let endpoint = NWEndpoint.hostPort(
@@ -582,72 +599,6 @@ final class LocalSendService: NSObject, ObservableObject {
         }
     }
 
-    private func arpNeighborIPs() -> [String] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/arp")
-        process.arguments = ["-an"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return [] }
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else { return [] }
-
-            let regex = try NSRegularExpression(pattern: #"\((\d{1,3}(?:\.\d{1,3}){3})\)"#)
-            let nsrange = NSRange(output.startIndex..<output.endIndex, in: output)
-            let matches = regex.matches(in: output, options: [], range: nsrange)
-
-            let ownIP = ownIPv4Address()
-            let ownPrefix = ownIP?.split(separator: ".").prefix(3).joined(separator: ".")
-
-            var ips: [String] = []
-            var seen = Set<String>()
-            for match in matches {
-                guard match.numberOfRanges > 1,
-                      let range = Range(match.range(at: 1), in: output)
-                else { continue }
-                let ip = String(output[range])
-                guard isValidIPv4(ip) else { continue }
-                if ip.hasPrefix("169.254.") { continue }
-                if ip == "255.255.255.255" { continue }
-
-                if let ownPrefix {
-                    let ipPrefix = ip.split(separator: ".").prefix(3).joined(separator: ".")
-                    guard ipPrefix == ownPrefix else { continue }
-                }
-
-                if seen.insert(ip).inserted {
-                    ips.append(ip)
-                }
-            }
-
-            return ips
-        } catch {
-            return []
-        }
-    }
-
-    private func localSubnetSweepIPs(radius: Int) -> [String] {
-        guard let own = ownIPv4Address(), isValidIPv4(own) else { return [] }
-        let parts = own.split(separator: ".").compactMap { Int($0) }
-        guard parts.count == 4 else { return [] }
-
-        let prefix = "\(parts[0]).\(parts[1]).\(parts[2])"
-        let myHost = parts[3]
-        let start = max(1, myHost - radius)
-        let end = min(254, myHost + radius)
-
-        return (start ... end)
-            .filter { $0 != myHost }
-            .map { "\(prefix).\($0)" }
-    }
-
     /// Interface names that never carry useful LAN discovery traffic. Bridged
     /// interfaces are deliberately absent: macOS Internet Sharing puts the LAN
     /// side on `bridge100`/`ap1`, which is exactly where hotspot clients live.
@@ -707,10 +658,6 @@ final class LocalSendService: NSObject, ObservableObject {
             guard let v = Int(p), (0 ... 255).contains(v) else { return false }
         }
         return true
-    }
-
-    private func ownIPv4Address() -> String? {
-        Self.discoverableIPv4Interfaces().first?.ip
     }
 
     private func isValidIPv4(_ ip: String) -> Bool {
@@ -1257,6 +1204,9 @@ final class LocalSendService: NSObject, ObservableObject {
         }
 
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        // Invalidate on every exit path, not just the successful one: an upload
+        // that throws used to leave the session (and its delegate) un-invalidated.
+        defer { session.finishTasksAndInvalidate() }
 
         let (data, response) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data, URLResponse), Error>) in
             let task = session.uploadTask(with: request, from: file.data) { data, response, error in
@@ -1272,8 +1222,6 @@ final class LocalSendService: NSObject, ObservableObject {
             }
             task.resume()
         }
-
-        session.finishTasksAndInvalidate()
 
         guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
