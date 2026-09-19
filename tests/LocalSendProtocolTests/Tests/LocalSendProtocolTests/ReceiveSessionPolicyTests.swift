@@ -79,6 +79,17 @@ final class ReceiveSessionPolicyTests: XCTestCase {
         XCTAssertFalse(ReceiveSessionPolicy.recordsFailureCard(userCancelled: true))
     }
 
+    // MARK: cancel
+
+    /// A cancel that arrives when nothing is running must be a no-op: the flag it
+    /// sets is consumed by the failure path, so it used to survive and suppress the
+    /// next transfer's failure card.
+    func testACancelNeedsSomethingToCancel() {
+        XCTAssertTrue(ReceiveSessionPolicy.canCancel(isReceiving: true, hasSession: false))
+        XCTAssertTrue(ReceiveSessionPolicy.canCancel(isReceiving: false, hasSession: true))
+        XCTAssertFalse(ReceiveSessionPolicy.canCancel(isReceiving: false, hasSession: false))
+    }
+
     // MARK: slot release
 
     func testTheSlotGoesBackWhenOnlyFailuresRemain() {

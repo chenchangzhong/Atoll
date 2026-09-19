@@ -63,6 +63,15 @@ public enum ReceiveSessionPolicy {
         !userCancelled
     }
 
+    /// Whether a cancel from the notch has anything to cancel.
+    ///
+    /// `cancelActiveTransfer()` needs this: the flag it sets is consumed by the
+    /// failure path, so a cancel that arrives when nothing is running used to stay
+    /// set and suppress the next transfer's failure card.
+    public static func canCancel(isReceiving: Bool, hasSession: Bool) -> Bool {
+        isReceiving || hasSession
+    }
+
     /// Whether the session slot can go back as soon as the last pending file is
     /// stored, because everything still in the session has already failed.
     public static func releasesSlotImmediately(fileIDs: Set<String>, failedFileIDs: Set<String>) -> Bool {

@@ -33,7 +33,7 @@ import uuid
 
 HOST = "127.0.0.1"
 PORT = 53317
-DOMAIN = "com.Ebullioscopic.Atoll.dev"
+DOMAIN = "com.Ebullioscopic.Atoll.dev"  # the Debug build's bundle id
 SETTING = "localSendAutoAcceptIncoming"
 DOWNLOADS = os.path.expanduser("~/Downloads")
 
@@ -228,20 +228,56 @@ def case_overflow_frames() -> None:
     post("/api/localsend/v2/cancel")
 
 
+def case_discovery_survives_an_upload() -> None:
+    """register/info must answer while an upload is streaming (compat boundary)."""
+    data = bytes(range(256)) * 400
+    name = versioned("smoke-busy.bin")
+    status, session = prepare([file_spec(name, data)])
+    if status != 200:
+        return record("register answers while an upload is in flight", False, f"prepare={status}")
+    sock = socket.create_connection((HOST, PORT), timeout=30)
+    file_id = list(session["files"])[0]
+    target = f"/api/localsend/v2/upload?sessionId={session['sessionId']}&fileId={file_id}&token={session['files'][file_id]}"
+    sock.sendall(f"POST {target} HTTP/1.1\r\nHost: smoke\r\nTransfer-Encoding: chunked\r\n\r\n".encode())
+    sock.sendall(b"10000\r\n" + data[: len(data) // 2] + b"\r\n")  # half the file, then hold
+    time.sleep(0.5)
+    register = json.dumps({"alias": "smoke", "version": "2.2", "fingerprint": "probe"}).encode()
+    reg_status, _ = http(
+        f"POST /api/localsend/v2/register HTTP/1.1\r\nHost: smoke\r\nContent-Length: {len(register)}\r\n\r\n".encode(),
+        register,
+        timeout=10,
+    )
+    info_status, _ = http(b"GET /api/localsend/v2/info HTTP/1.1\r\nHost: smoke\r\n\r\n", timeout=10)
+    sock.close()
+    time.sleep(0.5)
+    post("/api/localsend/v2/cancel")
+    os.path.exists(os.path.join(DOWNLOADS, name)) and os.remove(os.path.join(DOWNLOADS, name))
+    record(
+        "register/info answer while an upload is in flight",
+        reg_status == 200 and info_status == 200,
+        f"register={reg_status} info={info_status}",
+    )
+
+
 def case_empty_files() -> None:
     status, _ = post("/api/localsend/v2/prepare-upload", {"info": {"alias": "smoke", "fingerprint": "smoke"}, "files": {}})
     record("an empty file map is a bad request", status == 400, f"status={status}")
 
 
 def case_multi_file_with_one_failure() -> None:
-    """A failed file must not keep the session receiving after the rest is stored."""
+    """A mixed session keeps the failed file's retry window, then frees the slot.
+
+    The failed file stays for its retry window (ADR-0001 decision 4), so a fresh
+    `prepare-upload` is refused straight away — but the slot must come back on its
+    own, which is what used to leave the notch claiming to receive forever.
+    """
     good = bytes(range(256)) * 400
     bad = file_spec(versioned("smoke-first-bad.bin"), b"bad")
     bad["sha256"] = "deadbeef"
     ok = file_spec(versioned("smoke-second-ok.bin"), good)
     status, session = prepare([bad, ok])
     if status != 200:
-        return record("a failed file does not pin a multi-file session", False, f"prepare={status}")
+        return record("a mixed session frees its slot again", False, f"prepare={status}")
     first, _ = chunked_upload(session["sessionId"], bad["id"], session["files"][bad["id"]], b"bad")
     time.sleep(0.5)
     second, _ = chunked_upload(session["sessionId"], ok["id"], session["files"][ok["id"]], good)
@@ -249,14 +285,25 @@ def case_multi_file_with_one_failure() -> None:
     stored = os.path.exists(landed)
     if stored:
         os.remove(landed)
-    # The slot must be free again straight away.
-    follow_status, _ = prepare([file_spec(versioned("smoke-probe.bin"), b"probe")], timeout=5)
-    record(
-        "a failed file does not pin a multi-file session",
-        first == 422 and second == 200 and stored and follow_status in (200, 0),
-        f"first={first} second={second} stored={stored} next_prepare={follow_status or 'timeout'}",
-    )
+
+    immediate, _ = prepare([file_spec(versioned("smoke-probe.bin"), b"probe")], timeout=5)
+    deadline = time.time() + 60
+    released = False
+    while time.time() < deadline:
+        time.sleep(5)
+        try:
+            later, _ = prepare([file_spec(versioned("smoke-probe2.bin"), b"probe")], timeout=4)
+        except socket.timeout:
+            later = 200  # reached the decision state, so the slot was free
+        if later == 200:
+            released = True
+            break
     post("/api/localsend/v2/cancel")
+    record(
+        "a mixed session frees its slot again",
+        first == 422 and second == 200 and stored and immediate == 409 and released,
+        f"first={first} second={second} stored={stored} immediate={immediate} released={released}",
+    )
 
 
 # -------------------------------------------------- phase 2: manual decisions
@@ -345,6 +392,7 @@ def main() -> int:
                 case_checksum_mismatch,
                 case_overflow_frames,
                 case_empty_files,
+                case_discovery_survives_an_upload,
                 case_multi_file_with_one_failure,
             ],
         )

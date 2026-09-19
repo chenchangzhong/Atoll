@@ -104,6 +104,10 @@ final class LocalSendReceiveService: ObservableObject {
     /// file stays in `files` for the retry window, so it must not keep the session
     /// "receiving" once the remaining files are done.
     private var failedFileIDs: Set<String> = []
+    /// The last failure message, kept so a session that ends with a mix of stored
+    /// and failed files can still say what went wrong (the text is cleared while
+    /// the next file uploads, so progress stays visible).
+    private var lastFailureText: String?
     /// Set while an upload should stop because the user asked it to.
     private var cancelRequested = false
     /// Lets the user's cancel tear down the connection the upload is reading from,
@@ -247,6 +251,7 @@ final class LocalSendReceiveService: ObservableObject {
         sessionID = id
         self.senderIP = senderIP
         failedFileIDs = []
+        lastFailureText = nil
         lastSessionActivity = Date()
         files = accepted
         receiveProgress = 0
@@ -328,6 +333,7 @@ final class LocalSendReceiveService: ObservableObject {
             fileName,
             reason
         )
+        lastFailureText = failureText
         armSessionReaper(after: failedSessionTimeout)
         // Deliberately not auto-cleared: the session slot is still claimed, and the
         // Release action is the way out (including for an automatically accepted
@@ -342,7 +348,7 @@ final class LocalSendReceiveService: ObservableObject {
         // Only meaningful while something is actually being received; without this
         // a cancel that arrives when nothing is running left the sticky
         // `userCancelled` set for the next transfer.
-        guard isReceiving || sessionID != nil else { return }
+        guard ReceiveSessionPolicy.canCancel(isReceiving: isReceiving, hasSession: sessionID != nil) else { return }
         Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
         cancelRequested = true
         userCancelled = true
@@ -497,6 +503,9 @@ final class LocalSendReceiveService: ObservableObject {
                 Logger.log("LocalSend receive: cannot store \(file.name): \(error.localizedDescription)", category: .extensions)
                 return nil
             }
+            // A successful store clears any earlier failure for this file, so
+            // "failed" never means "failed at some point".
+            self.failedFileIDs.remove(file.id)
             self.files[file.id] = nil
             // Append before composing the summary: reading the list first made a
             // single-file transfer report "Stored 0 files in Downloads".
@@ -530,16 +539,12 @@ final class LocalSendReceiveService: ObservableObject {
             } else if ReceiveSessionPolicy.releasesSlotImmediately(
                 fileIDs: Set(self.files.keys), failedFileIDs: self.failedFileIDs
             ) {
-                // Every remaining file failed: nothing is left to receive, so the
-                // slot goes back now instead of waiting out a timer, while the
-                // failure card stays up (with Release) until the user or the next
-                // transfer clears it.
-                self.sessionReaperTask?.cancel()
-                self.sessionReaperTask = nil
-                self.sessionID = nil
-                self.senderIP = nil
-                self.files = [:]
-                self.receiveProgress = 0
+                // Nothing is left to receive, but failed files keep their retry
+                // window (ADR-0001 decision 4), so the slot is not released here.
+                // What the user needs is the failure itself: the text was cleared
+                // while the last file uploaded, so put it back.
+                self.failureText = self.lastFailureText
+                self.armSessionReaper(after: self.failedSessionTimeout)
             }
             self.receiveProgress = 0
             self.lastSessionActivity = Date()

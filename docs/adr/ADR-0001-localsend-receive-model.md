@@ -41,7 +41,8 @@ obvious from the wire format:
    progress card, which stops the stream, removes the partial file and releases the
    slot immediately; the sender is told the transfer failed, which is what
    cancelling means here.
-4. **A failed upload keeps its slot for 30 s, not 90 s.** Upstream keeps such a
+4. **A failed upload keeps its slot for ~30 s (the reaper ticks every 15 s, so
+   30–45 s in practice), not 90 s.** Upstream keeps such a
    session indefinitely, but only because its sender retries *the same file with
    the same token* — and even upstream only resets a checksum mismatch back to
    pending (within an attempt limit); other failures are terminal for that file.
@@ -95,8 +96,9 @@ obvious from the wire format:
   places in its own confirmation dialog. There is no allow-list, rate limit, or
   authentication.
 - **A transfer that fails says so and can be dismissed**, and a transfer in
-  progress can be cancelled; nothing in the receive flow ends without either
-  storing the file or telling the user.
+  progress can be cancelled. A session that ends with a mix of stored and failed
+  files reports the failure; a session where everything succeeded reports the
+  stored files.
 - **`~/Downloads` is the destination**, with `name (1).ext` de-duplication. A
   transfer is stored only if the announced SHA-256 matches (when one is announced)
   and, when a non-zero size was announced, the byte count matches it — up to 8 GiB.
@@ -117,7 +119,7 @@ obvious from the wire format:
   makes the sender fail; that is upstream's contract and is what the notch card
   says out loud.
 - **Switching the share provider to AirDrop stops receiving.** That follows from
-  the gate in decision 4; it is intended, and it is the most likely surprise for a
+  the gate in decision 6; it is intended, and it is the most likely surprise for a
   new user.
 
 ## Alternatives considered
