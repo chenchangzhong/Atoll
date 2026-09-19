@@ -473,6 +473,7 @@ final class LocalSendReceiveService: ObservableObject {
 
         guard let stored else {
             try? FileManager.default.removeItem(at: temporary)
+            await MainActor.run { self.isReceiving = false }
             return .server
         }
         Logger.log("LocalSend receive: stored \(stored.lastPathComponent) (\(written) bytes)", category: .extensions)
@@ -556,6 +557,11 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     /// has delivered almost nothing after two minutes is closed. (A 30-minute
     /// wall-clock cap used to do the latter and cut off an 8 GiB upload on a slow
     /// link.)
+    /// How long a single read may stay silent. This must tolerate a phone that
+    /// pauses mid-upload (measured: a 47 MB video stalled 20 s on Wi-Fi, and a
+    /// 20 s deadline killed it) — the throughput floor below is what bounds a
+    /// peer that never makes progress, so this can be generous.
+    private static let readDeadline: TimeInterval = 120
     private static let progressTick: TimeInterval = 15
     private static let progressGrace: TimeInterval = 120
     private static let minimumBytesPerSecond: Double = 256
@@ -854,7 +860,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         // cancellation, so the timeout would only surface once the peer closed.)
         let connection = self.connection
         let deadline = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(Self.readDeadline * 1_000_000_000))
             guard !Task.isCancelled else { return }
             self?.markClosed()
             connection.cancel()
