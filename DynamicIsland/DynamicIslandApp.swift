@@ -623,11 +623,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // and LocalSend is the selected share provider, so peers can push files
         // without the user opening the picker first.
         LocalSendService.shared.startReceiveAvailabilityObservation()
+
         // Deriving the device fingerprint can generate the client certificate
         // (three openssl runs); warm it off the main thread so the first
         // announcement does not stall the UI.
         Task.detached(priority: .utility) {
             _ = LocalSendService.deviceFingerprint
+            // A process killed mid-transfer leaves its partial file behind; clear the
+            // stale ones off the launch path (own prefix, old files only).
+            LocalSendReceiveService.shared.removeStalePartialFiles()
         }
 
         // Migrate legacy progress bar settings

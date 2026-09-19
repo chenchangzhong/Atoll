@@ -121,6 +121,10 @@ final class LocalSendReceiveService: ObservableObject {
             failedFileIDs.count
         )
     }
+    /// Partial files this session is writing. A transfer that is interrupted by
+    /// anything other than its own error path (a cancel, a session released while a
+    /// body is still being drained) leaves one of these behind, so releasing the
+    /// session removes them too.
     /// Set while an upload should stop because the user asked it to.
     private var uploadFlags = ReceiveUploadFlags()
     /// Lets the user's cancel tear down the connections reading uploads, instead of
@@ -144,6 +148,37 @@ final class LocalSendReceiveService: ObservableObject {
     /// unbounded number of reader tasks. High enough that an upload cannot make
     /// the server unreachable for discovery traffic.
     private static let connectionSlots = DispatchSemaphore(value: 64)
+
+    /// Partial files older than this are treated as leftovers of a killed process:
+    /// a live writer advances its mtime every chunk, so a stale mtime means nobody
+    /// is writing.
+    private static let stalePartialAge: TimeInterval = 6 * 60 * 60
+
+    /// Removes partial files left by a process that was killed mid-transfer.
+    ///
+    /// The error paths clean up after themselves, but nothing runs when the app is
+    /// killed, so these accumulate in the temporary directory (one 177 MB leftover was
+    /// found during bring-up). Only our own prefix and only files older than
+    /// `stalePartialAge` are touched, so a transfer that is in flight now is safe.
+    nonisolated func removeStalePartialFiles() {
+        let age = Self.stalePartialAge
+        let directory = FileManager.default.temporaryDirectory
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var removed = 0
+        for entry in entries where entry.lastPathComponent.hasPrefix("atoll-localsend-")
+            && entry.pathExtension == "part" {
+            let modified = (try? entry.resourceValues(forKeys: Set(keys)))?.contentModificationDate
+            guard let modified, Date().timeIntervalSince(modified) > age else { continue }
+            if (try? FileManager.default.removeItem(at: entry)) != nil { removed += 1 }
+        }
+        if removed > 0 {
+            Logger.log("LocalSend receive: removed \(removed) stale partial file(s)", category: .extensions)
+        }
+    }
 
     /// Entry point used by the 53317 listener in `LocalSendService`.
     nonisolated func accept(_ connection: NWConnection) {
@@ -311,6 +346,10 @@ final class LocalSendReceiveService: ObservableObject {
 
     /// Clears the single session slot and everything the notch derives from it.
     private func releaseSession() {
+        // Partial files are NOT deleted here: a body can still be streaming when the
+        // reaper releases a session (90 s of silence, while the read deadline allows
+        // 140 s), and unlinking underneath that writer turned a transfer that would
+        // have completed into a 500. `receiveUpload`'s own `defer` owns the file.
         failureText = nil
         lastFailureText = nil
         // A cancel belongs to the session it interrupted: leaving the flags set is
@@ -501,6 +540,14 @@ final class LocalSendReceiveService: ObservableObject {
 
         let temporary = FileManager.default.temporaryDirectory
             .appendingPathComponent("atoll-localsend-\(UUID().uuidString).part")
+
+        // One place that owns the partial file's lifetime, whatever ending it gets:
+        // stored (the move leaves nothing at this path), failed, cancelled, or a
+        // session that was released while this body was still being written.
+        // Releasing a session must NOT delete the file underneath a live writer —
+        // that turned a paused-but-connected transfer into a 500 (the reaper fires
+        // after 90 s of silence while the read deadline allows 140 s).
+        defer { try? FileManager.default.removeItem(at: temporary) }
         guard FileManager.default.createFile(atPath: temporary.path, contents: nil) else {
             await MainActor.run { self.isReceiving = false }
             Logger.log("LocalSend receive: cannot create a temporary file for \(file.name)", category: .extensions)
@@ -527,19 +574,16 @@ final class LocalSendReceiveService: ObservableObject {
                 if cancelled { throw LocalSendProtocolError.cancelled }
             }
         } catch LocalSendProtocolError.tooLarge {
-            try? FileManager.default.removeItem(at: temporary)
             await MainActor.run { self.isReceiving = false }
             Logger.log("LocalSend receive: \(file.name) exceeded the declared size", category: .extensions)
             return .badRequest
         } catch {
-            try? FileManager.default.removeItem(at: temporary)
             await MainActor.run { self.isReceiving = false }
             Logger.log("LocalSend receive: upload of \(file.name) aborted: \(error.localizedDescription)", category: .extensions)
             return .server
         }
 
         if file.size > 0, written != file.size {
-            try? FileManager.default.removeItem(at: temporary)
             await MainActor.run { self.isReceiving = false }
             Logger.log("LocalSend receive: \(file.name) truncated (\(written) of \(file.size) bytes)", category: .extensions)
             return .server
@@ -548,7 +592,6 @@ final class LocalSendReceiveService: ObservableObject {
         if let expected = file.sha256 {
             let actual = hasher.finalize().map { String(format: "%02x", $0) }.joined()
             guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
-                try? FileManager.default.removeItem(at: temporary)
                 await MainActor.run { self.isReceiving = false }
                 Logger.log("LocalSend receive: checksum mismatch for \(file.name)", category: .extensions)
                 return .unprocessable
@@ -603,7 +646,6 @@ final class LocalSendReceiveService: ObservableObject {
         }
 
         guard let stored else {
-            try? FileManager.default.removeItem(at: temporary)
             await MainActor.run { self.isReceiving = false }
             return .server
         }
