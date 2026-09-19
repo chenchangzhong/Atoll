@@ -910,9 +910,11 @@ struct ContentView: View {
                       Group {
                           // An incoming transfer takes over the expanded notch so
                           // the user can accept or decline without leaving Atoll.
-                          if localSendReceiveService.pendingRequest != nil
-                              || localSendReceiveService.isReceiving
-                              || localSendReceiveService.completionText != nil {
+                          // Single source of truth: this used to repeat the
+                          // condition by hand and drifted, so the failure state
+                          // alone did not take the notch over and the media view
+                          // covered it.
+                          if isReceiveUIActive {
                               LocalSendReceiveRequestView()
                           } else {
                               switch coordinator.currentView {

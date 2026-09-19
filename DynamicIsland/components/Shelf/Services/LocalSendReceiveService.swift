@@ -563,6 +563,11 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     /// whose network dropped kept quiet, and the phone itself reported an error
     /// immediately while this side still showed progress). TCP cannot tell us any
     /// sooner — a dropped network sends nothing, so there is no FIN to react to.
+    /// How long a single read may stay silent before the transfer is declared
+    /// dead (measured while bringing this up: a phone whose network dropped went
+    /// completely silent, and the phone itself reported the error immediately
+    /// while this side still showed progress; 3 s was used during bring-up for
+    /// fast feedback, which is too eager for a sender that merely pauses).
     private static let readDeadline: TimeInterval = 30
     private static let progressTick: TimeInterval = 15
     private static let progressGrace: TimeInterval = 120
