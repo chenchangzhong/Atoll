@@ -314,7 +314,7 @@ final class LocalSendReceiveService: ObservableObject {
         // A cancel belongs to the session it interrupted: leaving the flags set is
         // what would let a later session's failure be swallowed as "the user asked
         // for this".
-        _ = uploadFlags.consumeUserCancelled()
+        uploadFlags.beginUpload()
         failedFileIDs = []
         sessionID = nil
         senderIP = nil
@@ -344,7 +344,7 @@ final class LocalSendReceiveService: ObservableObject {
             // Unreachable today: the only thing that sets this flag also releases the
             // session, which resets it. Kept as a guard so a future path that cancels
             // without releasing cannot swallow the next session's failure card.
-            _ = uploadFlags.consumeUserCancelled()
+            uploadFlags.beginUpload()
             return
         }
         let reason: String

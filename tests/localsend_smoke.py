@@ -11,8 +11,9 @@ protocol answers and the resulting files on disk.
     python3 tests/localsend_smoke.py --no-restart    # app already running
 
 It toggles `localSendAutoAcceptIncoming` (the notch would otherwise wait for a
-click), restarting the app for each phase, and always restores the setting and
-the app afterwards. Only the files it creates are removed.
+click), restarting the app for each phase, and always restores the setting and the
+app afterwards. It removes the files it creates; partial files that predate the run
+are left alone.
 
 Exit code 0 means every case passed.
 """
@@ -257,6 +258,17 @@ def case_discovery_survives_an_upload() -> None:
     sock.sendall(f"POST {target} HTTP/1.1\r\nHost: smoke\r\nTransfer-Encoding: chunked\r\n\r\n".encode())
     sock.sendall(b"10000\r\n" + data[: len(data) // 2] + b"\r\n")  # half the file, then hold
     time.sleep(0.5)
+    # Positive control: while the upload is suspended the partial file must be
+    # visible where we look for it. Without this the leak assertion below could pass
+    # by looking in the wrong directory or with the wrong name pattern.
+    in_flight = partial_files() - parts_before
+    if not in_flight:
+        sock.close()
+        return record(
+            "register/info answer while an upload is in flight",
+            False,
+            f"no .part visible in {parts_dir()} while an upload is suspended",
+        )
     register = json.dumps({"alias": "smoke", "version": "2.2", "fingerprint": "probe"}).encode()
     reg_status, _ = http(
         f"POST /api/localsend/v2/register HTTP/1.1\r\nHost: smoke\r\nContent-Length: {len(register)}\r\n\r\n".encode(),
