@@ -557,11 +557,13 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     /// has delivered almost nothing after two minutes is closed. (A 30-minute
     /// wall-clock cap used to do the latter and cut off an 8 GiB upload on a slow
     /// link.)
-    /// How long a single read may stay silent. This must tolerate a phone that
-    /// pauses mid-upload (measured: a 47 MB video stalled 20 s on Wi-Fi, and a
-    /// 20 s deadline killed it) — the throughput floor below is what bounds a
-    /// peer that never makes progress, so this can be generous.
-    private static let readDeadline: TimeInterval = 120
+    /// How long a single read may stay silent before the transfer is declared
+    /// dead. A sender that is really pushing a file delivers something every few
+    /// hundred milliseconds; 30 s of silence means it is gone (measured: a phone
+    /// whose network dropped kept quiet, and the phone itself reported an error
+    /// immediately while this side still showed progress). TCP cannot tell us any
+    /// sooner — a dropped network sends nothing, so there is no FIN to react to.
+    private static let readDeadline: TimeInterval = 30
     private static let progressTick: TimeInterval = 15
     private static let progressGrace: TimeInterval = 120
     private static let minimumBytesPerSecond: Double = 256

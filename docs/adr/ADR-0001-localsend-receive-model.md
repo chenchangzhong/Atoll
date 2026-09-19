@@ -49,10 +49,10 @@ obvious from the wire format:
    peer certificate; the server side does not ask for one. Plain HTTP on a LAN is
    an accepted risk, not an oversight — see Consequences.
 6. **Connections are bounded by activity, not by a stopwatch.** Every read has a
-   120 s deadline (generous on purpose: a phone pausing mid-upload must not be cut
-   off — a 20 s deadline killed a legitimate 47 MB video that stalled for 20 s),
-   and a connection that has delivered less than 256 B/s after a two-minute grace
-   period is closed — a trickle of one byte every 19 s satisfies
+   30 s deadline — a sender that is really streaming delivers continuously, and a
+   dropped network only becomes visible here when the silence is long enough,
+   because a vanished peer sends no FIN — and a connection that has delivered less
+   than 256 B/s after a two-minute grace period is closed — a trickle of one byte every 19 s satisfies
    a per-read deadline, so only a throughput floor can bound it. A wall-clock
    lifetime (30 minutes, as an earlier revision had) is simpler but wrong: it cuts
    off a legitimate multi-gigabyte upload on a slow link. The other limits are
