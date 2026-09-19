@@ -102,6 +102,9 @@ final class LocalSendReceiveService: ObservableObject {
     @Published private(set) var failureText: String?
     /// Set while an upload should stop because the user asked it to.
     private var cancelRequested = false
+    /// Lets the user's cancel tear down the connection the upload is reading from,
+    /// instead of waiting for the next chunk or the read deadline.
+    private var activeUploadCancellation: (() -> Void)?
     private var userCancelled = false
 
     /// How long the sender waits for the user before we answer 500.
@@ -336,10 +339,21 @@ final class LocalSendReceiveService: ObservableObject {
         Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
         cancelRequested = true
         userCancelled = true
+        activeUploadCancellation?()
+        activeUploadCancellation = nil
         isReceiving = false
         sessionReaperTask?.cancel()
         sessionReaperTask = nil
         releaseSession()
+    }
+
+    /// Registered by the upload connection so a user cancel can end the read now.
+    func registerActiveUploadCancellation(_ cancel: @escaping () -> Void) {
+        activeUploadCancellation = cancel
+    }
+
+    func clearActiveUploadCancellation() {
+        activeUploadCancellation = nil
     }
 
     /// The user released a failed transfer instead of waiting for the reaper.
@@ -362,6 +376,16 @@ final class LocalSendReceiveService: ObservableObject {
         guard let pending = pendingRequest, pending.senderIP == senderIP else { return }
         Logger.log("LocalSend receive: sender left while the decision was pending", category: .extensions)
         resolveDecision(.cancelled)
+    }
+
+    /// An accepted session whose sender is already gone: the `200` could not be
+    /// delivered, so there is nothing to wait for.
+    func abandonUnreachableSession(sessionID: String) {
+        guard self.sessionID == sessionID else { return }
+        Logger.log("LocalSend receive: sender was gone before the accepted session started", category: .extensions)
+        sessionReaperTask?.cancel()
+        sessionReaperTask = nil
+        releaseSession()
     }
 
     /// The sender ended the transfer (`POST /api/localsend/v2/cancel`).
@@ -735,6 +759,15 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         case .timedOut:
             try await send(Self.json(status: 500, payload: ["message": "Internal server error"]))
         case let .accepted(sessionID, tokens):
+            if isClosed {
+                // The sender left while the user was deciding: the tokens cannot be
+                // delivered, so nobody will ever upload. Releasing here keeps the
+                // notch from sitting on "Receiving…" until the idle reaper.
+                await MainActor.run {
+                    LocalSendReceiveService.shared.abandonUnreachableSession(sessionID: sessionID)
+                }
+                return
+            }
             try await send(Self.json(status: 200, payload: ["sessionId": sessionID, "files": tokens]))
         }
     }
@@ -781,7 +814,16 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             try await send(Self.json(status: 400, payload: ["message": "Missing content length"]))
             return
         }
+        await MainActor.run {
+            LocalSendReceiveService.shared.registerActiveUploadCancellation { [weak self] in
+                self?.markClosed()
+                self?.connection.cancel()
+            }
+        }
         let failure = await LocalSendReceiveService.shared.receiveUpload(file: file, body: reader)
+        await MainActor.run {
+            LocalSendReceiveService.shared.clearActiveUploadCancellation()
+        }
         if let failure {
             await MainActor.run {
                 LocalSendReceiveService.shared.noteUploadFailure(failure, fileName: file.name)
