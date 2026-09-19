@@ -62,20 +62,32 @@ struct ContentView: View {
     /// suppression token (so a lost transition cannot pin the notch open forever)
     /// and hands back a notch this flow owns.
     private func reconcileReceiveNotch() {
-        guard !isReceiveUIActive else {
-            receiveLastActiveAt = Date()
+        let decision = ReceiveNotchPolicy.decide(
+            cardVisible: isReceiveUIActive,
+            inactiveFor: Date().timeIntervalSince(receiveLastActiveAt)
+        )
+        if isReceiveUIActive { receiveLastActiveAt = Date() }
+
+        guard decision.concludes else {
+            if decision.holdsNotch {
+                vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
+            }
             return
         }
-        guard Date().timeIntervalSince(receiveLastActiveAt) > 1.5 else { return }
+
+        // Release our token before asking whether anything else wants the notch
+        // open, so our own suppression is not what blocks the collapse. Closing has
+        // to be explicit: the notch normally collapses on a mouse-exit event, and a
+        // prompt never generates one.
         vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
-        guard receiveOwnsNotch else { return }
+        let owns = receiveOwnsNotch
         receiveOwnsNotch = false
-        // Closing has to be explicit: the notch normally collapses on a mouse-exit
-        // event, and a prompt never generates one, so an answered, declined,
-        // failed or completed request used to leave the notch expanded — whether
-        // or not the notch was already open when the prompt appeared. Unless the
-        // user is pointing at it or another feature is holding it open.
-        if vm.notchState == .open, !isHovering, !shouldPreventAutoClose() {
+        if ReceiveNotchPolicy.shouldClose(
+            ownsNotch: owns,
+            notchOpen: vm.notchState == .open,
+            hovering: isHovering,
+            preventedByOthers: shouldPreventAutoClose()
+        ) {
             withAnimation(.smooth(duration: 0.25)) {
                 vm.close()
             }
