@@ -100,6 +100,10 @@ final class LocalSendReceiveService: ObservableObject {
     /// Set when an upload fails. Without it the notch retracted silently while the
     /// session slot stayed claimed, and the next sender only got a 409.
     @Published private(set) var failureText: String?
+    /// Files of the current session that failed and are still retryable. A failed
+    /// file stays in `files` for the retry window, so it must not keep the session
+    /// "receiving" once the remaining files are done.
+    private var failedFileIDs: Set<String> = []
     /// Set while an upload should stop because the user asked it to.
     private var cancelRequested = false
     /// Lets the user's cancel tear down the connection the upload is reading from,
@@ -242,6 +246,7 @@ final class LocalSendReceiveService: ObservableObject {
 
         sessionID = id
         self.senderIP = senderIP
+        failedFileIDs = []
         lastSessionActivity = Date()
         files = accepted
         receiveProgress = 0
@@ -284,6 +289,7 @@ final class LocalSendReceiveService: ObservableObject {
     /// Clears the single session slot and everything the notch derives from it.
     private func releaseSession() {
         failureText = nil
+        failedFileIDs = []
         sessionID = nil
         senderIP = nil
         files = [:]
@@ -295,11 +301,13 @@ final class LocalSendReceiveService: ObservableObject {
     /// Records a failed upload: what the notch shows, and why the session is still
     /// claimed (upstream lets the sender retry the same file, so the slot is kept
     /// until the reaper or an explicit release).
-    func noteUploadFailure(_ error: LocalSendReceiveError, fileName: String) {
+    func noteUploadFailure(_ error: LocalSendReceiveError, file: LocalSendReceiveFile) {
+        let fileName = file.name
+        failedFileIDs.insert(file.id)
         // One failure path (a destination that cannot be written) returned without
         // clearing this, which left the progress card up forever and the failure
         // card invisible behind it.
-        isReceiving = false
+        isReceiving = files.contains { !failedFileIDs.contains($0.key) }
         if userCancelled {
             // The abort is what the user asked for; no failure card for it.
             userCancelled = false
@@ -325,7 +333,6 @@ final class LocalSendReceiveService: ObservableObject {
         // Release action is the way out (including for an automatically accepted
         // transfer whose notch never opened). The text goes away when the session
         // is released, when the user releases it, or when the next upload starts.
-        Logger.log("LocalSend receive: \(fileName) failed — \(reason)", category: .extensions)
     }
 
     /// The user cancelled an in-flight transfer from the notch: the streaming loop
@@ -508,14 +515,26 @@ final class LocalSendReceiveService: ObservableObject {
                     await MainActor.run { self?.completionText = nil }
                 }
             }
-            // Stay in the receiving state until the whole session is done, or
-            // the notch would flip back between files.
-            self.isReceiving = !self.files.isEmpty
+            // Still receiving only while a file that has not failed is left: a
+            // failed file stays in the session for its retry window, and counting
+            // it would keep the progress card up with nothing to receive.
+            self.isReceiving = self.files.contains { !self.failedFileIDs.contains($0.key) }
             if self.files.isEmpty {
                 self.sessionReaperTask?.cancel()
                 self.sessionReaperTask = nil
-            } else {
+            } else if self.isReceiving {
                 self.armSessionReaper()
+            } else {
+                // Every remaining file failed: nothing is left to receive, so the
+                // slot goes back now instead of waiting out a timer, while the
+                // failure card stays up (with Release) until the user or the next
+                // transfer clears it.
+                self.sessionReaperTask?.cancel()
+                self.sessionReaperTask = nil
+                self.sessionID = nil
+                self.senderIP = nil
+                self.files = [:]
+                self.receiveProgress = 0
             }
             self.receiveProgress = 0
             self.lastSessionActivity = Date()
@@ -826,7 +845,7 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
         }
         if let failure {
             await MainActor.run {
-                LocalSendReceiveService.shared.noteUploadFailure(failure, fileName: file.name)
+                LocalSendReceiveService.shared.noteUploadFailure(failure, file: file)
             }
             let message: String
             switch failure {
