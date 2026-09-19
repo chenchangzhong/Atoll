@@ -36,8 +36,11 @@ obvious from the wire format:
    and shows a card with a Release action — including for a transfer that was
    accepted automatically, where the notch does not open by itself, so reopening it
    during the retention window still explains what happened. That card is *not*
-   auto-cleared: it lives exactly as long as the session slot is claimed, so the
-   card and the window agree. An in-flight transfer can be cancelled from the
+   auto-cleared: it lives as long as the failure is worth explaining, which is not
+   exactly as long as the slot is claimed — it is cleared while the next file uploads
+   (so that file's progress is visible) and restored when the session ends with a mix
+   of stored and failed files, while a session that ends with only failures keeps it
+   for the retry window. An in-flight transfer can be cancelled from the
    progress card, which stops the stream, removes the partial file and releases the
    slot immediately; the sender is told the transfer failed, which is what
    cancelling means here.
