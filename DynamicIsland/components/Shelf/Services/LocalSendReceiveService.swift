@@ -108,6 +108,17 @@ final class LocalSendReceiveService: ObservableObject {
     /// and failed files can still say what went wrong (the text is cleared while
     /// the next file uploads, so progress stays visible).
     private var lastFailureText: String?
+
+    /// What to say about a session that ends with failures: naming one file is only
+    /// honest when exactly one failed.
+    private var failureSummary: String? {
+        guard !failedFileIDs.isEmpty else { return nil }
+        guard failedFileIDs.count > 1 else { return lastFailureText }
+        return String(
+            format: NSLocalizedString("Could not receive %lld files", comment: "LocalSend: several files failed"),
+            failedFileIDs.count
+        )
+    }
     /// Set while an upload should stop because the user asked it to.
     private var uploadFlags = ReceiveUploadFlags()
     /// Lets the user's cancel tear down the connections reading uploads, instead of
@@ -560,7 +571,7 @@ final class LocalSendReceiveService: ObservableObject {
                 // window (ADR-0001 decision 4), so the slot is not released here.
                 // What the user needs is the failure itself: the text was cleared
                 // while the last file uploaded, so put it back.
-                self.failureText = self.lastFailureText
+                self.failureText = self.failureSummary
                 self.armSessionReaper(after: self.failedSessionTimeout)
             }
             self.receiveProgress = 0
