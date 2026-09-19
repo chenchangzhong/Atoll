@@ -78,3 +78,34 @@ public enum ReceiveSessionPolicy {
         !fileIDs.isEmpty && fileIDs.subtracting(failedFileIDs).isEmpty
     }
 }
+
+/// Tracks the connections currently streaming an upload, so a cancel from the notch
+/// can tear the right one down.
+///
+/// Keyed by file id on purpose: the service allows several upload connections at
+/// once, and a single slot let the second registration overwrite the first while
+/// either one's cleanup cleared the other's.
+public struct ActiveUploadCancellations {
+    private var cancellations: [String: () -> Void] = [:]
+
+    public init() {}
+
+    public var count: Int { cancellations.count }
+
+    public mutating func register(fileID: String, cancel: @escaping () -> Void) {
+        cancellations[fileID] = cancel
+    }
+
+    public mutating func clear(fileID: String) {
+        cancellations[fileID] = nil
+    }
+
+    /// Tears down every upload in flight and reports how many were cancelled.
+    @discardableResult
+    public mutating func cancelAll() -> Int {
+        let cancelled = cancellations.count
+        for cancel in cancellations.values { cancel() }
+        cancellations.removeAll()
+        return cancelled
+    }
+}

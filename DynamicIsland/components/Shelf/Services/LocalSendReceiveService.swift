@@ -110,9 +110,9 @@ final class LocalSendReceiveService: ObservableObject {
     private var lastFailureText: String?
     /// Set while an upload should stop because the user asked it to.
     private var cancelRequested = false
-    /// Lets the user's cancel tear down the connection the upload is reading from,
-    /// instead of waiting for the next chunk or the read deadline.
-    private var activeUploadCancellation: (() -> Void)?
+    /// Lets the user's cancel tear down the connections reading uploads, instead of
+    /// waiting for the next chunk or the read deadline.
+    private var activeUploads = ActiveUploadCancellations()
     private var userCancelled = false
 
     /// How long the sender waits for the user before we answer 500.
@@ -353,8 +353,7 @@ final class LocalSendReceiveService: ObservableObject {
         Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
         cancelRequested = true
         userCancelled = true
-        activeUploadCancellation?()
-        activeUploadCancellation = nil
+        activeUploads.cancelAll()
         isReceiving = false
         sessionReaperTask?.cancel()
         sessionReaperTask = nil
@@ -362,12 +361,12 @@ final class LocalSendReceiveService: ObservableObject {
     }
 
     /// Registered by the upload connection so a user cancel can end the read now.
-    func registerActiveUploadCancellation(_ cancel: @escaping () -> Void) {
-        activeUploadCancellation = cancel
+    func registerActiveUploadCancellation(fileID: String, cancel: @escaping () -> Void) {
+        activeUploads.register(fileID: fileID, cancel: cancel)
     }
 
-    func clearActiveUploadCancellation() {
-        activeUploadCancellation = nil
+    func clearActiveUploadCancellation(fileID: String) {
+        activeUploads.clear(fileID: fileID)
     }
 
     /// The user released a failed transfer instead of waiting for the reaper.
@@ -845,14 +844,14 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
             return
         }
         await MainActor.run {
-            LocalSendReceiveService.shared.registerActiveUploadCancellation { [weak self] in
+            LocalSendReceiveService.shared.registerActiveUploadCancellation(fileID: file.id) { [weak self] in
                 self?.markClosed()
                 self?.connection.cancel()
             }
         }
         let failure = await LocalSendReceiveService.shared.receiveUpload(file: file, body: reader)
         await MainActor.run {
-            LocalSendReceiveService.shared.clearActiveUploadCancellation()
+            LocalSendReceiveService.shared.clearActiveUploadCancellation(fileID: file.id)
         }
         if let failure {
             await MainActor.run {

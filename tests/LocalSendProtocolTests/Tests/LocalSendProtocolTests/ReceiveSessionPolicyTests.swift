@@ -90,6 +90,55 @@ final class ReceiveSessionPolicyTests: XCTestCase {
         XCTAssertFalse(ReceiveSessionPolicy.canCancel(isReceiving: false, hasSession: false))
     }
 
+    // MARK: upload cancellations
+
+    /// The registry M-4 relies on: a cancel must reach every upload in flight, and
+    /// one upload finishing must not clear another's entry (it used to be a single
+    /// slot, so concurrent uploads clobbered each other).
+    func testEveryUploadInFlightCanBeCancelled() {
+        var registry = ActiveUploadCancellations()
+        var cancelled: Set<String> = []
+        registry.register(fileID: "a") { cancelled.insert("a") }
+        registry.register(fileID: "b") { cancelled.insert("b") }
+        XCTAssertEqual(registry.count, 2)
+
+        XCTAssertEqual(registry.cancelAll(), 2)
+        XCTAssertEqual(cancelled, ["a", "b"])
+        XCTAssertEqual(registry.count, 0, "cancelAll also forgets them")
+    }
+
+    func testOneUploadFinishingLeavesTheOtherRegistered() {
+        var registry = ActiveUploadCancellations()
+        var cancelled: Set<String> = []
+        registry.register(fileID: "a") { cancelled.insert("a") }
+        registry.register(fileID: "b") { cancelled.insert("b") }
+
+        registry.clear(fileID: "a")  // the first upload ended on its own
+        XCTAssertEqual(registry.count, 1)
+
+        XCTAssertEqual(registry.cancelAll(), 1)
+        XCTAssertEqual(cancelled, ["b"], "the finished upload must not be cancelled")
+    }
+
+    func testReRegisteringTheSameFileReplacesTheEntry() {
+        var registry = ActiveUploadCancellations()
+        var first = 0
+        var second = 0
+        registry.register(fileID: "a") { first += 1 }
+        registry.register(fileID: "a") { second += 1 }  // a retry of the same file
+
+        XCTAssertEqual(registry.count, 1)
+        XCTAssertEqual(registry.cancelAll(), 1)
+        XCTAssertEqual(first, 0)
+        XCTAssertEqual(second, 1)
+    }
+
+    func testCancellingWithNothingInFlightIsHarmless() {
+        var registry = ActiveUploadCancellations()
+        XCTAssertEqual(registry.cancelAll(), 0)
+        XCTAssertEqual(registry.count, 0)
+    }
+
     // MARK: slot release
 
     func testOnlyFailuresRemainIsDetected() {
