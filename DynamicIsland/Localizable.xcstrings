@@ -16287,7 +16287,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "扩展的拖拽检测区域"
+            "value": "拖拽时提前展开刘海"
           }
         }
       }

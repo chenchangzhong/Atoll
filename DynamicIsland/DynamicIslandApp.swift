@@ -133,7 +133,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Expanded drag detection
 
     /// Opens the notch as soon as a dragged item enters the notch region, which
-    /// extends a full open-notch height below the top edge. Waiting for AppKit
+    /// extends half an open-notch height below the top edge. Waiting for AppKit
     /// to target the drop view means waiting until the pointer is already in the
     /// menu bar band, where macOS 27 hands the drag to Mission Control instead.
     private func setupDragDetectors() {
@@ -152,15 +152,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupDragDetector(for screen: NSScreen) {
         let screenFrame = screen.frame
-        let notchHeight = openNotchSize.height
-        let notchWidth = openNotchSize.width
+        // Width tracks the collapsed notch, so only drags aimed at the notch count.
+        let detectionWidth = getClosedNotchSize(screen: screen.localizedName).width
+        // Half the open-notch height: enough lead to open before the pointer
+        // reaches the menu bar band, without triggering well below the notch.
+        let detectionHeight = openNotchSize.height / 2
 
-        // Notch region at the top-center of the screen where an open notch would occupy
+        // Detection region at the top-center of the screen, on the collapsed notch footprint
         let notchRegion = CGRect(
-            x: screenFrame.midX - notchWidth / 2,
-            y: screenFrame.maxY - notchHeight,
-            width: notchWidth,
-            height: notchHeight
+            x: screenFrame.midX - detectionWidth / 2,
+            y: screenFrame.maxY - detectionHeight,
+            width: detectionWidth,
+            height: detectionHeight
         )
 
         let detector = DragDetector(notchRegion: notchRegion)
@@ -326,6 +329,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func hideWindowsForLock() {
         guard !windowsHiddenForLock else { return }
         windowsHiddenForLock = true
+        // The windows are ordered out while locked, so stop early-open detection
+        // rather than leaving a stale expanded shelf behind for unlock.
+        cleanupDragDetectors()
 
         if Defaults[.showOnAllDisplays] {
             for window in windows.values {
@@ -351,6 +357,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.orderFrontRegardless()
             window.alphaValue = 1
         }
+
+        setupDragDetectors()
     }
     
     private func cleanupWindows(shouldInvert: Bool = false) {
