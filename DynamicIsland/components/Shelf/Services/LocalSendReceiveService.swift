@@ -113,7 +113,9 @@ final class LocalSendReceiveService: ObservableObject {
     /// honest when exactly one failed.
     private var failureSummary: String? {
         guard !failedFileIDs.isEmpty else { return nil }
-        guard failedFileIDs.count > 1 else { return lastFailureText }
+        guard ReceiveSessionPolicy.reportsFailureCount(failedFileCount: failedFileIDs.count) else {
+            return lastFailureText
+        }
         return String(
             format: NSLocalizedString("Could not receive %lld files", comment: "LocalSend: several files failed"),
             failedFileIDs.count
@@ -365,6 +367,10 @@ final class LocalSendReceiveService: ObservableObject {
             reason
         )
         lastFailureText = failureText
+        // The count is what an all-failed session ends up showing: nothing is stored,
+        // so the mixed-ending path never runs. Naming one file is only honest when
+        // exactly one failed.
+        failureText = failureSummary
         armSessionReaper(after: failedSessionTimeout)
         // Deliberately not auto-cleared: the session slot is still claimed, and the
         // Release action is the way out (including for an automatically accepted
@@ -665,11 +671,13 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     /// has delivered almost nothing after two minutes is closed. (A 30-minute
     /// wall-clock cap used to do the latter and cut off an 8 GiB upload on a slow
     /// link.)
-    /// How long a single read may stay silent. This is only a backstop: TCP
-    /// keepalive on the listener (see `startRegisterListenerIfNeeded`) is what
-    /// distinguishes a peer that is gone from one that is merely quiet, so this can
-    /// be generous without making the notch wait minutes for a dropped network.
-    private static let readDeadline: TimeInterval = 60
+    /// How long a single read may stay silent. This is a backstop, not the peer
+    /// detector: TCP keepalive on the listener reports a dropped peer in ~14 s via
+    /// the kernel. It sits above the throughput floor's two-minute grace so that the
+    /// *binding* limit for a sender that is merely paused is that floor — i.e. a
+    /// pause of up to about two minutes survives, and anything longer is treated as
+    /// a dead transfer.
+    private static let readDeadline: TimeInterval = 140
     private static let progressTick: TimeInterval = 15
     private static let progressGrace: TimeInterval = 120
     private static let minimumBytesPerSecond: Double = 256

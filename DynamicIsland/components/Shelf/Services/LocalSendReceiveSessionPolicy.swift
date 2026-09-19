@@ -54,6 +54,12 @@ public enum ReceiveSessionPolicy {
         !fileIDs.subtracting(failedFileIDs).isEmpty
     }
 
+    /// Whether a session that ends with failures should report a count instead of
+    /// naming one file. Naming a file is only honest when exactly one failed.
+    public static func reportsFailureCount(failedFileCount: Int) -> Bool {
+        failedFileCount > 1
+    }
+
     /// Whether a failure still belongs to the session that is active.
     ///
     /// A sender's `/cancel` can race a failing upload: the session is gone by the

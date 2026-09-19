@@ -90,6 +90,17 @@ final class ReceiveSessionPolicyTests: XCTestCase {
         XCTAssertFalse(ReceiveSessionPolicy.canCancel(isReceiving: false, hasSession: false))
     }
 
+    // MARK: failure summary
+
+    /// Naming one file is only honest when exactly one failed: an all-failed session
+    /// has no stored-file ending, so the count has to come from the failure itself.
+    func testTheFailureCountIsReportedOnlyForSeveralFailures() {
+        XCTAssertFalse(ReceiveSessionPolicy.reportsFailureCount(failedFileCount: 0))
+        XCTAssertFalse(ReceiveSessionPolicy.reportsFailureCount(failedFileCount: 1))
+        XCTAssertTrue(ReceiveSessionPolicy.reportsFailureCount(failedFileCount: 2))
+        XCTAssertTrue(ReceiveSessionPolicy.reportsFailureCount(failedFileCount: 5))
+    }
+
     // MARK: cancel flags
 
     /// The sticky-flag bug: a cancel that arrived when nothing was left to abort

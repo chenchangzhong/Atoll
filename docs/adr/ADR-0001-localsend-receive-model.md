@@ -138,4 +138,4 @@ obvious from the wire format:
   whose encryption is off, which is a supported configuration.
 - **A wall-clock cap on a connection (30 minutes).** Rejected: it bounds a
   trickling peer only by also cutting off legitimate slow transfers; the
-  throughput floor in decision 6 bounds the trickle and nothing else.
+  throughput floor in decision 8 bounds the trickle and nothing else.
