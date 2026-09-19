@@ -57,14 +57,14 @@ final class ReceiveSessionPolicyTests: XCTestCase {
 
         XCTAssertTrue(ReceiveSessionPolicy.isReceiving(fileIDs: files, failedFileIDs: []))
         XCTAssertTrue(ReceiveSessionPolicy.isReceiving(fileIDs: files, failedFileIDs: failed), "B is still to come")
-        XCTAssertFalse(ReceiveSessionPolicy.releasesSlotImmediately(fileIDs: files, failedFileIDs: failed))
+        XCTAssertFalse(ReceiveSessionPolicy.onlyFailuresRemain(fileIDs: files, failedFileIDs: failed))
 
         files.remove("b")  // B stored
         XCTAssertFalse(
             ReceiveSessionPolicy.isReceiving(fileIDs: files, failedFileIDs: failed),
             "the failed file must not keep the session receiving"
         )
-        XCTAssertTrue(ReceiveSessionPolicy.releasesSlotImmediately(fileIDs: files, failedFileIDs: failed))
+        XCTAssertTrue(ReceiveSessionPolicy.onlyFailuresRemain(fileIDs: files, failedFileIDs: failed))
     }
 
     // MARK: failure card
@@ -92,13 +92,13 @@ final class ReceiveSessionPolicyTests: XCTestCase {
 
     // MARK: slot release
 
-    func testTheSlotGoesBackWhenOnlyFailuresRemain() {
-        XCTAssertTrue(ReceiveSessionPolicy.releasesSlotImmediately(fileIDs: ["a"], failedFileIDs: ["a"]))
-        XCTAssertTrue(ReceiveSessionPolicy.releasesSlotImmediately(fileIDs: ["a", "b"], failedFileIDs: ["a", "b"]))
+    func testOnlyFailuresRemainIsDetected() {
+        XCTAssertTrue(ReceiveSessionPolicy.onlyFailuresRemain(fileIDs: ["a"], failedFileIDs: ["a"]))
+        XCTAssertTrue(ReceiveSessionPolicy.onlyFailuresRemain(fileIDs: ["a", "b"], failedFileIDs: ["a", "b"]))
     }
 
-    func testTheSlotIsKeptWhileSomethingCanStillArrive() {
-        XCTAssertFalse(ReceiveSessionPolicy.releasesSlotImmediately(fileIDs: ["a", "b"], failedFileIDs: ["a"]))
-        XCTAssertFalse(ReceiveSessionPolicy.releasesSlotImmediately(fileIDs: [], failedFileIDs: []))
+    func testAFailedFileDoesNotMeanOnlyFailuresRemain() {
+        XCTAssertFalse(ReceiveSessionPolicy.onlyFailuresRemain(fileIDs: ["a", "b"], failedFileIDs: ["a"]))
+        XCTAssertFalse(ReceiveSessionPolicy.onlyFailuresRemain(fileIDs: [], failedFileIDs: []))
     }
 }

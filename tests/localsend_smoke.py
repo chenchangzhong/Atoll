@@ -294,7 +294,9 @@ def case_multi_file_with_one_failure() -> None:
         try:
             later, _ = prepare([file_spec(versioned("smoke-probe2.bin"), b"probe")], timeout=4)
         except socket.timeout:
-            later = 200  # reached the decision state, so the slot was free
+            # A busy slot answers 409 immediately, so a timeout here cannot prove
+            # anything: record it as unresolved rather than as success.
+            later = 0
         if later == 200:
             released = True
             break
@@ -302,7 +304,7 @@ def case_multi_file_with_one_failure() -> None:
     record(
         "a mixed session frees its slot again",
         first == 422 and second == 200 and stored and immediate == 409 and released,
-        f"first={first} second={second} stored={stored} immediate={immediate} released={released}",
+        f"first={first} second={second} stored={stored} immediate={immediate} released={released} last={later}",
     )
 
 

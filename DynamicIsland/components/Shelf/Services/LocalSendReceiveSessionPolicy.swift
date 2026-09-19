@@ -72,9 +72,9 @@ public enum ReceiveSessionPolicy {
         isReceiving || hasSession
     }
 
-    /// Whether the session slot can go back as soon as the last pending file is
-    /// stored, because everything still in the session has already failed.
-    public static func releasesSlotImmediately(fileIDs: Set<String>, failedFileIDs: Set<String>) -> Bool {
+    /// Whether everything still in the session has already failed, so nothing is
+    /// left to receive (the slot is still kept for the failed file's retry window).
+    public static func onlyFailuresRemain(fileIDs: Set<String>, failedFileIDs: Set<String>) -> Bool {
         !fileIDs.isEmpty && fileIDs.subtracting(failedFileIDs).isEmpty
     }
 }

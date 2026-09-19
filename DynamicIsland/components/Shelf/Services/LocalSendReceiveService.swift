@@ -294,6 +294,7 @@ final class LocalSendReceiveService: ObservableObject {
     /// Clears the single session slot and everything the notch derives from it.
     private func releaseSession() {
         failureText = nil
+        lastFailureText = nil
         failedFileIDs = []
         sessionID = nil
         senderIP = nil
@@ -536,7 +537,7 @@ final class LocalSendReceiveService: ObservableObject {
                 self.sessionReaperTask = nil
             } else if self.isReceiving {
                 self.armSessionReaper()
-            } else if ReceiveSessionPolicy.releasesSlotImmediately(
+            } else if ReceiveSessionPolicy.onlyFailuresRemain(
                 fileIDs: Set(self.files.keys), failedFileIDs: self.failedFileIDs
             ) {
                 // Nothing is left to receive, but failed files keep their retry
