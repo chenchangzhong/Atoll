@@ -19,16 +19,22 @@ struct LocalSendReceiveRequestView: View {
 
     var body: some View {
         Group {
-            if let request = receive.pendingRequest {
-                requestCard(request)
-            } else if let failure = receive.failureText {
-                // Ahead of the progress card on purpose: a failure that left the
-                // receiving flag set used to hide behind "Receiving…" forever.
-                failureCard(failure)
-            } else if receive.isReceiving {
+            switch ReceiveSessionPolicy.card(
+                pendingRequest: receive.pendingRequest != nil,
+                failure: receive.failureText != nil,
+                receiving: receive.isReceiving,
+                completion: receive.completionText != nil
+            ) {
+            case .request:
+                if let request = receive.pendingRequest { requestCard(request) }
+            case .failure:
+                if let failure = receive.failureText { failureCard(failure) }
+            case .progress:
                 progressCard
-            } else if let completion = receive.completionText {
-                completionCard(completion)
+            case .completion:
+                if let completion = receive.completionText { completionCard(completion) }
+            case .none:
+                EmptyView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

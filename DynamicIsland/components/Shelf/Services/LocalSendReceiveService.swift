@@ -307,8 +307,8 @@ final class LocalSendReceiveService: ObservableObject {
         // One failure path (a destination that cannot be written) returned without
         // clearing this, which left the progress card up forever and the failure
         // card invisible behind it.
-        isReceiving = files.contains { !failedFileIDs.contains($0.key) }
-        if userCancelled {
+        isReceiving = ReceiveSessionPolicy.isReceiving(fileIDs: Set(files.keys), failedFileIDs: failedFileIDs)
+        guard ReceiveSessionPolicy.recordsFailureCard(userCancelled: userCancelled) else {
             // The abort is what the user asked for; no failure card for it.
             userCancelled = false
             cancelRequested = false
@@ -518,13 +518,18 @@ final class LocalSendReceiveService: ObservableObject {
             // Still receiving only while a file that has not failed is left: a
             // failed file stays in the session for its retry window, and counting
             // it would keep the progress card up with nothing to receive.
-            self.isReceiving = self.files.contains { !self.failedFileIDs.contains($0.key) }
+            self.isReceiving = ReceiveSessionPolicy.isReceiving(
+                fileIDs: Set(self.files.keys),
+                failedFileIDs: self.failedFileIDs
+            )
             if self.files.isEmpty {
                 self.sessionReaperTask?.cancel()
                 self.sessionReaperTask = nil
             } else if self.isReceiving {
                 self.armSessionReaper()
-            } else {
+            } else if ReceiveSessionPolicy.releasesSlotImmediately(
+                fileIDs: Set(self.files.keys), failedFileIDs: self.failedFileIDs
+            ) {
                 // Every remaining file failed: nothing is left to receive, so the
                 // slot goes back now instead of waiting out a timer, while the
                 // failure card stays up (with Release) until the user or the next
