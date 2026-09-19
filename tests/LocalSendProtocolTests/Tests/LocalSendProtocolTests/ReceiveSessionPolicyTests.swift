@@ -101,7 +101,9 @@ final class ReceiveSessionPolicyTests: XCTestCase {
         flags.beginUpload()            // the next transfer starts
         XCTAssertFalse(flags.userCancelled)
         XCTAssertFalse(flags.cancelRequested)
-        XCTAssertFalse(ReceiveSessionPolicy.recordsFailureCard(userCancelled: flags.userCancelled))
+        // With the flags cleared, the next transfer's failure is reported normally —
+        // which is the fix: it used to be suppressed by the carried-over flag.
+        XCTAssertTrue(ReceiveSessionPolicy.recordsFailureCard(userCancelled: flags.userCancelled))
     }
 
     func testConsumingAUserCancelClearsBothFlags() {
