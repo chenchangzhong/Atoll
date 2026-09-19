@@ -54,8 +54,33 @@ struct ContentView: View {
     /// when the flow ends. A fully automatic transfer owns nothing, so it never
     /// closes a notch the user opened for something else.
     @State private var receiveOwnsNotch = false
-    /// Debounces the end of the receive flow (see the `isReceiveUIActive` handler).
-    @State private var receiveEndTask: Task<Void, Never>?
+    /// When the receive flow was last active; the reconciler waits out the
+    /// inactive instant that accepting passes through before concluding.
+    @State private var receiveLastActiveAt = Date.distantPast
+
+    /// Concludes the receive flow once it has really stopped: releases the
+    /// suppression token (so a lost transition cannot pin the notch open forever)
+    /// and hands back a notch this flow owns.
+    private func reconcileReceiveNotch() {
+        guard !isReceiveUIActive else {
+            receiveLastActiveAt = Date()
+            return
+        }
+        guard Date().timeIntervalSince(receiveLastActiveAt) > 1.5 else { return }
+        vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
+        guard receiveOwnsNotch else { return }
+        receiveOwnsNotch = false
+        // Closing has to be explicit: the notch normally collapses on a mouse-exit
+        // event, and a prompt never generates one, so an answered, declined,
+        // failed or completed request used to leave the notch expanded — whether
+        // or not the notch was already open when the prompt appeared. Unless the
+        // user is pointing at it or another feature is holding it open.
+        if vm.notchState == .open, !isHovering, !shouldPreventAutoClose() {
+            withAnimation(.smooth(duration: 0.25)) {
+                vm.close()
+            }
+        }
+    }
 
     /// The notch shows the receive card while any of these hold.
     private var isReceiveUIActive: Bool {
@@ -917,34 +942,23 @@ struct ContentView: View {
                   }
               }
               .onChange(of: isReceiveUIActive) { _, active in
-                  receiveEndTask?.cancel()
-                  if active {
-                      // Also covers an automatically accepted transfer: the notch
-                      // must not collapse mid-flight just because the sender never
-                      // asked a question.
-                      vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
-                  } else {
-                      // Accepting passes through an inactive instant — the session
-                      // is created after the decision resolves — so the end is only
-                      // concluded once the flow has stayed inactive.
-                      receiveEndTask = Task { @MainActor in
-                          try? await Task.sleep(nanoseconds: 500_000_000)
-                          guard !Task.isCancelled, !isReceiveUIActive else { return }
-                          vm.setAutoCloseSuppression(false, token: localSendReceiveSuppressionToken)
-                          // Closing has to be explicit: the notch normally collapses
-                          // on a mouse-exit event, and a prompt never generates one,
-                          // so an answered, declined or completed request used to
-                          // leave the notch expanded — whether or not the notch was
-                          // already open when the prompt appeared. Unless the user is
-                          // pointing at it or another feature is holding it open.
-                          guard receiveOwnsNotch else { return }
-                          receiveOwnsNotch = false
-                          if !isHovering, !shouldPreventAutoClose() {
-                              withAnimation(.smooth(duration: 0.25)) {
-                                  vm.close()
-                              }
-                          }
-                      }
+                  guard active else { return }
+                  receiveLastActiveAt = Date()
+                  // Also covers an automatically accepted transfer: the notch must
+                  // not collapse mid-flight just because the sender never asked a
+                  // question.
+                  vm.setAutoCloseSuppression(true, token: localSendReceiveSuppressionToken)
+              }
+              // Reconciled on a timer instead of only on the transition above:
+              // accepting passes through an inactive instant (the session is created
+              // after the decision resolves), and a transition that never arrives —
+              // because the state moved twice inside one update — used to leave the
+              // suppression token held, so the notch could never collapse again.
+              .task {
+                  while !Task.isCancelled {
+                      try? await Task.sleep(nanoseconds: 1_000_000_000)
+                      guard !Task.isCancelled else { return }
+                      reconcileReceiveNotch()
                   }
               }
               .onChange(of: vm.isAutoCloseSuppressed) { _, suppressed in

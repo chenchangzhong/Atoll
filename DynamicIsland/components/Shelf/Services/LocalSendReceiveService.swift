@@ -81,6 +81,11 @@ final class LocalSendReceiveService: ObservableObject {
     /// How long an accepted session may go without progress before its slot is
     /// released and the notch is freed.
     private let abandonedSessionTimeout: TimeInterval = 90
+    /// After a failed upload the slot is kept so the sender can retry the same
+    /// file with the same token (upstream keeps it forever), but a fresh
+    /// `prepare-upload` — the common "send it again" — waits for it, so this
+    /// window is deliberately much shorter.
+    private let failedSessionTimeout: TimeInterval = 30
     private var sessionReaperTask: Task<Void, Never>?
 
     @Published private(set) var receiveProgress: Double = 0
@@ -247,20 +252,21 @@ final class LocalSendReceiveService: ObservableObject {
     /// accepted and no upload ever started. Progress keeps it alive, so a slow
     /// multi-minute upload is not cut off mid-file (a plain per-session deadline
     /// used to do exactly that).
-    private func armSessionReaper() {
+    private func armSessionReaper(after timeout: TimeInterval? = nil) {
         sessionReaperTask?.cancel()
         let armed = sessionID
+        let idleTimeout = timeout ?? abandonedSessionTimeout
         sessionReaperTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
                 guard !Task.isCancelled, let self else { return }
                 let idle = await MainActor.run { Date().timeIntervalSince(self.lastSessionActivity) }
-                guard idle >= self.abandonedSessionTimeout else { continue }
+                guard idle >= idleTimeout else { continue }
                 await MainActor.run {
                     // Re-check inside the block: a new upload can have refreshed
                     // the timestamp between the measurement and this hop.
                     guard self.sessionID == armed,
-                          Date().timeIntervalSince(self.lastSessionActivity) >= self.abandonedSessionTimeout
+                          Date().timeIntervalSince(self.lastSessionActivity) >= idleTimeout
                     else { return }
                     Logger.log("LocalSend receive: session \(armed ?? "?") idle; releasing the slot", category: .extensions)
                     self.releaseSession()
@@ -299,6 +305,7 @@ final class LocalSendReceiveService: ObservableObject {
             fileName,
             reason
         )
+        armSessionReaper(after: failedSessionTimeout)
         clearFailureTask?.cancel()
         clearFailureTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 6_000_000_000)
