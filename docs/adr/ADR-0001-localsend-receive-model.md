@@ -69,7 +69,7 @@ obvious from the wire format:
 8. **Connections are bounded by activity, not by a stopwatch.** Keepalive is enabled per connection (5 s idle, three 3 s probes) so a dead peer is
    reported by the kernel in roughly 14 s, which is also what tells a gone phone
    apart from one that merely stopped sending: a paused-but-connected sender keeps
-   ACKing its probes and its transfer survives. Every read additionally has a 60 s
+   ACKing its probes and its transfer survives. Every read additionally has a 140 s
    deadline as a backstop, and a connection that has delivered less
    than 256 B/s after a two-minute grace period is closed — a trickle of one byte every 19 s satisfies
    a per-read deadline, so only a throughput floor can bound it. A wall-clock
@@ -106,6 +106,10 @@ obvious from the wire format:
   A sender that announces size 0 skips the size check, so its body is whatever it
   chose to send; that is the one path where a short body is stored rather than
   rejected, and it is why the checksum matters when a peer provides one.
+- **An ending that stored something says so**, whoever ended it: the last file of a
+  session, a session the sender abandoned, one the sender cancelled, and one the user
+  cancelled from the notch. A session that ends with failures reports the failure
+  instead, deliberately.
 - **Only a decision interrupts the user.** The notch opens by itself when a
   `prepare-upload` needs an answer; an automatically accepted transfer does not
   pop it open, and a completion only collapses a notch this flow opened, so a

@@ -311,6 +311,10 @@ final class LocalSendReceiveService: ObservableObject {
     private func releaseSession() {
         failureText = nil
         lastFailureText = nil
+        // A cancel belongs to the session it interrupted: leaving the flags set is
+        // what would let a later session's failure be swallowed as "the user asked
+        // for this".
+        _ = uploadFlags.consumeUserCancelled()
         failedFileIDs = []
         sessionID = nil
         senderIP = nil
@@ -337,9 +341,9 @@ final class LocalSendReceiveService: ObservableObject {
         // card invisible behind it.
         isReceiving = ReceiveSessionPolicy.isReceiving(fileIDs: Set(files.keys), failedFileIDs: failedFileIDs)
         guard ReceiveSessionPolicy.recordsFailureCard(userCancelled: uploadFlags.userCancelled) else {
-            // Defence in depth: the `recordsFailure` guard above already rejects the
-            // reachable cancel race (the session is gone by then), so this branch is
-            // kept for the case where a cancel leaves the session alive.
+            // Unreachable today: the only thing that sets this flag also releases the
+            // session, which resets it. Kept as a guard so a future path that cancels
+            // without releasing cannot swallow the next session's failure card.
             _ = uploadFlags.consumeUserCancelled()
             return
         }
@@ -381,6 +385,9 @@ final class LocalSendReceiveService: ObservableObject {
         uploadFlags.requestCancel()
         activeUploads.cancelAll()
         isReceiving = false
+        // The user asked to stop, but files that already arrived are still worth
+        // saying out loud.
+        if failureText == nil { reportStoredFiles() }
         sessionReaperTask?.cancel()
         sessionReaperTask = nil
         releaseSession()
@@ -419,9 +426,10 @@ final class LocalSendReceiveService: ObservableObject {
 
     /// Says what has been stored so far and clears the text after a moment.
     ///
-    /// Shared by every ending: the last file of a session, a session the sender
-    /// abandoned, and a session the sender cancelled. It used to be written out
-    /// twice, which is how one of the two paths ended up silent.
+    /// Called by the endings that report stored files: the last file of a session,
+    /// a session the sender abandoned, one the sender cancelled, and one the user
+    /// cancelled from the notch. A session that ends with failures reports the
+    /// failure instead, deliberately.
     private func reportStoredFiles() {
         let names = lastReceivedNames
         guard !names.isEmpty else { return }
@@ -557,7 +565,6 @@ final class LocalSendReceiveService: ObservableObject {
             // Append before composing the summary: reading the list first made a
             // single-file transfer report "Stored 0 files in Downloads".
             self.lastReceivedNames.append(destination.lastPathComponent)
-            let names = self.lastReceivedNames
             if self.files.isEmpty {
                 self.sessionID = nil
                 self.senderIP = nil

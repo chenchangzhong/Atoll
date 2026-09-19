@@ -28,6 +28,7 @@ import plistlib
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -156,6 +157,20 @@ def file_spec(name: str, data: bytes) -> dict:
     }
 
 
+def parts_dir() -> str:
+    """Where the app writes its partial files.
+
+    `FileManager.default.temporaryDirectory` is the per-user temp directory
+    (`$TMPDIR`), not `/tmp` — globbing `/tmp` made the stray-part assertion
+    vacuously true.
+    """
+    return tempfile.gettempdir()
+
+
+def partial_files() -> set:
+    return set(glob.glob(os.path.join(parts_dir(), "atoll-localsend-*.part")))
+
+
 def versioned(name: str) -> str:
     """A name unique to this run, so de-duplication cannot interfere."""
     stem, dot, ext = name.partition(".")
@@ -235,7 +250,7 @@ def case_discovery_survives_an_upload() -> None:
     status, session = prepare([file_spec(name, data)])
     if status != 200:
         return record("register/info answer while an upload is in flight", False, f"prepare={status}")
-    parts_before = set(glob.glob("/tmp/atoll-localsend-*.part"))
+    parts_before = partial_files()
     sock = socket.create_connection((HOST, PORT), timeout=30)
     file_id = list(session["files"])[0]
     target = f"/api/localsend/v2/upload?sessionId={session['sessionId']}&fileId={file_id}&token={session['files'][file_id]}"
@@ -256,9 +271,18 @@ def case_discovery_survives_an_upload() -> None:
     left_behind = os.path.exists(landed)  # a half-sent upload must leave nothing
     if left_behind:
         os.remove(landed)
-    stray_parts = set(glob.glob("/tmp/atoll-localsend-*.part")) - parts_before
+    # The cleanup runs in receiveUpload's error path, which is not ordered against
+    # the /cancel response, so give it a moment before declaring a leak.
+    deadline = time.time() + 5
+    stray_parts = partial_files() - parts_before
+    while stray_parts and time.time() < deadline:
+        time.sleep(0.5)
+        stray_parts = partial_files() - parts_before
     for stray in stray_parts:
-        os.remove(stray)
+        try:
+            os.remove(stray)
+        except OSError:
+            pass  # the app may have removed it between the listing and this line
     record(
         "register/info answer while an upload is in flight",
         reg_status == 200 and info_status == 200 and not left_behind and not stray_parts,

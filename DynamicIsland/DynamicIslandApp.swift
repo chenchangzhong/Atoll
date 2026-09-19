@@ -98,6 +98,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let mediaControlsStateCoordinator = MediaControlsStateCoordinator.shared
     var closeNotchWorkItem: DispatchWorkItem?
     private var previousScreens: [NSScreen]?
+    private var dragDetectors: [NSScreen: DragDetector] = [:]
     private var onboardingWindowController: NSWindowController?
     private var cancellables = Set<AnyCancellable>()
     private var windowsHiddenForLock = false
@@ -127,6 +128,66 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Store reference and schedule
         windowSizeUpdateWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+    }
+
+    // MARK: - Expanded drag detection
+
+    /// Opens the notch as soon as a dragged item enters the notch region, which
+    /// extends a full open-notch height below the top edge. Waiting for AppKit
+    /// to target the drop view means waiting until the pointer is already in the
+    /// menu bar band, where macOS 27 hands the drag to Mission Control instead.
+    private func setupDragDetectors() {
+        cleanupDragDetectors()
+
+        guard Defaults[.expandedDragDetection] else { return }
+
+        if Defaults[.showOnAllDisplays] {
+            for screen in NSScreen.screens {
+                setupDragDetector(for: screen)
+            }
+        } else if let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens.first {
+            setupDragDetector(for: screen)
+        }
+    }
+
+    private func setupDragDetector(for screen: NSScreen) {
+        let screenFrame = screen.frame
+        let notchHeight = openNotchSize.height
+        let notchWidth = openNotchSize.width
+
+        // Notch region at the top-center of the screen where an open notch would occupy
+        let notchRegion = CGRect(
+            x: screenFrame.midX - notchWidth / 2,
+            y: screenFrame.maxY - notchHeight,
+            width: notchWidth,
+            height: notchHeight
+        )
+
+        let detector = DragDetector(notchRegion: notchRegion)
+
+        detector.onDragEntersNotchRegion = { [weak self] in
+            DispatchQueue.main.async {
+                self?.handleDragEntersNotchRegion(on: screen)
+            }
+        }
+
+        dragDetectors[screen] = detector
+        detector.startMonitoring()
+    }
+
+    private func handleDragEntersNotchRegion(on screen: NSScreen) {
+        if Defaults[.showOnAllDisplays], let viewModel = viewModels[screen] {
+            viewModel.open()
+            coordinator.currentView = .shelf
+        } else if !Defaults[.showOnAllDisplays], screen == window?.screen {
+            vm.open()
+            coordinator.currentView = .shelf
+        }
+    }
+
+    private func cleanupDragDetectors() {
+        dragDetectors.values.forEach { $0.stopMonitoring() }
+        dragDetectors.removeAll()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -233,6 +294,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Cancel any pending window size updates
         windowSizeUpdateWorkItem?.cancel()
+        cleanupDragDetectors()
         NotificationCenter.default.removeObserver(self)
         
         // Stop AudioTap capture
@@ -706,12 +768,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.selectedScreenChanged, object: nil, queue: nil
         ) { [weak self] _ in
             self?.adjustWindowPosition(changeAlpha: true)
+            self?.setupDragDetectors()
         }
 
         NotificationCenter.default.addObserver(
             forName: Notification.Name.notchHeightChanged, object: nil, queue: nil
         ) { [weak self] _ in
             self?.adjustWindowPosition()
+            self?.setupDragDetectors()
         }
 
         NotificationCenter.default.addObserver(
@@ -739,6 +803,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 self.adjustWindowPosition()
             }
+            self.setupDragDetectors()
         }
 
         DistributedNotificationCenter.default().addObserver(
@@ -815,6 +880,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         
+        // Keep the early-open drag detectors in sync with the setting that
+        // governs them (it used to be a dead toggle).
+        Defaults.publisher(.expandedDragDetection, options: [])
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.setupDragDetectors()
+                }
+            }
+            .store(in: &cancellables)
+
+        setupDragDetectors()
+
         previousScreens = NSScreen.screens
     }
 
@@ -1111,6 +1188,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.cleanupWindows()
                 self?.adjustWindowPosition(changeAlpha: true)
+                self?.setupDragDetectors()
             }
         }
     }
