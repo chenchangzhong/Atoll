@@ -235,6 +235,7 @@ def case_discovery_survives_an_upload() -> None:
     status, session = prepare([file_spec(name, data)])
     if status != 200:
         return record("register/info answer while an upload is in flight", False, f"prepare={status}")
+    parts_before = set(glob.glob("/tmp/atoll-localsend-*.part"))
     sock = socket.create_connection((HOST, PORT), timeout=30)
     file_id = list(session["files"])[0]
     target = f"/api/localsend/v2/upload?sessionId={session['sessionId']}&fileId={file_id}&token={session['files'][file_id]}"
@@ -255,10 +256,13 @@ def case_discovery_survives_an_upload() -> None:
     left_behind = os.path.exists(landed)  # a half-sent upload must leave nothing
     if left_behind:
         os.remove(landed)
+    stray_parts = set(glob.glob("/tmp/atoll-localsend-*.part")) - parts_before
+    for stray in stray_parts:
+        os.remove(stray)
     record(
         "register/info answer while an upload is in flight",
-        reg_status == 200 and info_status == 200 and not left_behind,
-        f"register={reg_status} info={info_status} partial_file={left_behind}",
+        reg_status == 200 and info_status == 200 and not left_behind and not stray_parts,
+        f"register={reg_status} info={info_status} partial_file={left_behind} stray_parts={len(stray_parts)}",
     )
 
 

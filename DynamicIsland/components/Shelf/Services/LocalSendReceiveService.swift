@@ -298,18 +298,7 @@ final class LocalSendReceiveService: ObservableObject {
                     // A session can also end without a failure and without a last
                     // file: some files were stored and the rest never arrived. Say
                     // so, instead of collapsing the notch with no word about it.
-                    if self.failureText == nil, !self.lastReceivedNames.isEmpty {
-                        let names = self.lastReceivedNames
-                        self.completionText = names.count == 1
-                            ? String(format: NSLocalizedString("Stored %@ in Downloads", comment: "LocalSend: a received file was stored"), names[0])
-                            : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
-                        self.clearCompletionTask?.cancel()
-                        self.clearCompletionTask = Task { [weak self] in
-                            try? await Task.sleep(nanoseconds: 3_000_000_000)
-                            guard !Task.isCancelled else { return }
-                            await MainActor.run { self?.completionText = nil }
-                        }
-                    }
+                    if self.failureText == nil { self.reportStoredFiles() }
                     Logger.log("LocalSend receive: session \(armed ?? "?") idle; releasing the slot", category: .extensions)
                     self.releaseSession()
                 }
@@ -348,7 +337,9 @@ final class LocalSendReceiveService: ObservableObject {
         // card invisible behind it.
         isReceiving = ReceiveSessionPolicy.isReceiving(fileIDs: Set(files.keys), failedFileIDs: failedFileIDs)
         guard ReceiveSessionPolicy.recordsFailureCard(userCancelled: uploadFlags.userCancelled) else {
-            // The abort is what the user asked for; no failure card for it.
+            // Defence in depth: the `recordsFailure` guard above already rejects the
+            // reachable cancel race (the session is gone by then), so this branch is
+            // kept for the case where a cancel leaves the session alive.
             _ = uploadFlags.consumeUserCancelled()
             return
         }
@@ -426,6 +417,25 @@ final class LocalSendReceiveService: ObservableObject {
         resolveDecision(.cancelled)
     }
 
+    /// Says what has been stored so far and clears the text after a moment.
+    ///
+    /// Shared by every ending: the last file of a session, a session the sender
+    /// abandoned, and a session the sender cancelled. It used to be written out
+    /// twice, which is how one of the two paths ended up silent.
+    private func reportStoredFiles() {
+        let names = lastReceivedNames
+        guard !names.isEmpty else { return }
+        completionText = names.count == 1
+            ? String(format: NSLocalizedString("Stored %@ in Downloads", comment: "LocalSend: a received file was stored"), names[0])
+            : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
+        clearCompletionTask?.cancel()
+        clearCompletionTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.completionText = nil }
+        }
+    }
+
     /// An accepted session whose sender is already gone: the `200` could not be
     /// delivered, so there is nothing to wait for.
     func abandonUnreachableSession(sessionID: String) {
@@ -445,6 +455,9 @@ final class LocalSendReceiveService: ObservableObject {
         if let activeSession = sessionID, self.senderIP == senderIP,
            requested == nil || requested == activeSession {
             Logger.log("LocalSend receive: sender cancelled session \(activeSession)", category: .extensions)
+            // Files that already arrived are still worth reporting: the sender
+            // giving up is not the user's doing.
+            if failureText == nil { reportStoredFiles() }
             sessionReaperTask?.cancel()
             sessionReaperTask = nil
             releaseSession()
@@ -548,15 +561,7 @@ final class LocalSendReceiveService: ObservableObject {
             if self.files.isEmpty {
                 self.sessionID = nil
                 self.senderIP = nil
-                self.completionText = names.count == 1
-                    ? String(format: NSLocalizedString("Stored %@ in Downloads", comment: "LocalSend: a received file was stored"), names[0])
-                    : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
-                self.clearCompletionTask?.cancel()
-                self.clearCompletionTask = Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    guard !Task.isCancelled else { return }
-                    await MainActor.run { self?.completionText = nil }
-                }
+                self.reportStoredFiles()
             }
             // Still receiving only while a file that has not failed is left: a
             // failed file stays in the session for its retry window, and counting
