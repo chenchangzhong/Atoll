@@ -54,6 +54,15 @@ public enum ReceiveSessionPolicy {
         !fileIDs.subtracting(failedFileIDs).isEmpty
     }
 
+    /// Whether a failure still belongs to the session that is active.
+    ///
+    /// A sender's `/cancel` can race a failing upload: the session is gone by the
+    /// time the failure is recorded, and without this the notch would show an
+    /// orphan card for a transfer that no longer exists.
+    public static func recordsFailure(fileID: String, sessionFileIDs: Set<String>, sessionActive: Bool) -> Bool {
+        sessionActive && sessionFileIDs.contains(fileID)
+    }
+
     /// Whether a failed upload should surface a card.
     ///
     /// A cancel the user asked for is not a failure to report. The flag that
@@ -107,5 +116,43 @@ public struct ActiveUploadCancellations {
         for cancel in cancellations.values { cancel() }
         cancellations.removeAll()
         return cancelled
+    }
+}
+
+/// The two cancel flags a transfer carries.
+///
+/// They are a value type because their lifetime is the bug: `userCancelled` is
+/// consumed by the failure path, so a cancel that arrives when nothing is left to
+/// abort used to stay set and suppress the *next* transfer's failure card. Starting
+/// an upload resets both, and consuming one resets both.
+public struct ReceiveUploadFlags: Equatable {
+    public private(set) var cancelRequested = false
+    public private(set) var userCancelled = false
+
+    public init() {}
+
+    public mutating func beginUpload() {
+        cancelRequested = false
+        userCancelled = false
+    }
+
+    public mutating func requestCancel() {
+        cancelRequested = true
+        userCancelled = true
+    }
+
+    /// Returns whether the abort was user-requested, clearing both flags.
+    public mutating func consumeUserCancelled() -> Bool {
+        let wasCancelled = userCancelled
+        beginUpload()
+        return wasCancelled
+    }
+}
+
+public extension ReceiveSessionPolicy {
+    /// Whether the session a caller is acting on is still the active one (a newer
+    /// transfer may have replaced it in the meantime).
+    static func isCurrentSession(_ sessionID: String?, expected: String) -> Bool {
+        sessionID == expected
     }
 }

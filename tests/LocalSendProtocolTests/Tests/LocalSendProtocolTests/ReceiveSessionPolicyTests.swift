@@ -90,6 +90,51 @@ final class ReceiveSessionPolicyTests: XCTestCase {
         XCTAssertFalse(ReceiveSessionPolicy.canCancel(isReceiving: false, hasSession: false))
     }
 
+    // MARK: cancel flags
+
+    /// The sticky-flag bug: a cancel that arrived when nothing was left to abort
+    /// stayed set, and the next transfer's failure card was silently suppressed.
+    func testStartingAnUploadClearsCarriedOverCancelFlags() {
+        var flags = ReceiveUploadFlags()
+        flags.requestCancel()          // nothing was in flight; the flag lingered
+        XCTAssertTrue(flags.userCancelled)
+        flags.beginUpload()            // the next transfer starts
+        XCTAssertFalse(flags.userCancelled)
+        XCTAssertFalse(flags.cancelRequested)
+        XCTAssertFalse(ReceiveSessionPolicy.recordsFailureCard(userCancelled: flags.userCancelled))
+    }
+
+    func testConsumingAUserCancelClearsBothFlags() {
+        var flags = ReceiveUploadFlags()
+        flags.requestCancel()
+        XCTAssertTrue(flags.consumeUserCancelled())
+        XCTAssertFalse(flags.userCancelled)
+        XCTAssertFalse(flags.cancelRequested)
+        XCTAssertFalse(flags.consumeUserCancelled(), "a second consume reports nothing")
+    }
+
+    // MARK: failure attribution
+
+    /// A sender's /cancel can race a failing upload; the card must not outlive the
+    /// session it belonged to.
+    func testAFailureForAGoneSessionIsIgnored() {
+        XCTAssertFalse(
+            ReceiveSessionPolicy.recordsFailure(fileID: "a", sessionFileIDs: [], sessionActive: false)
+        )
+        XCTAssertFalse(
+            ReceiveSessionPolicy.recordsFailure(fileID: "a", sessionFileIDs: ["b"], sessionActive: true)
+        )
+        XCTAssertTrue(
+            ReceiveSessionPolicy.recordsFailure(fileID: "a", sessionFileIDs: ["a", "b"], sessionActive: true)
+        )
+    }
+
+    func testSessionIdentityCheck() {
+        XCTAssertTrue(ReceiveSessionPolicy.isCurrentSession("s1", expected: "s1"))
+        XCTAssertFalse(ReceiveSessionPolicy.isCurrentSession("s2", expected: "s1"))
+        XCTAssertFalse(ReceiveSessionPolicy.isCurrentSession(nil, expected: "s1"))
+    }
+
     // MARK: upload cancellations
 
     /// The registry M-4 relies on: a cancel must reach every upload in flight, and

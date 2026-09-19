@@ -109,11 +109,10 @@ final class LocalSendReceiveService: ObservableObject {
     /// the next file uploads, so progress stays visible).
     private var lastFailureText: String?
     /// Set while an upload should stop because the user asked it to.
-    private var cancelRequested = false
+    private var uploadFlags = ReceiveUploadFlags()
     /// Lets the user's cancel tear down the connections reading uploads, instead of
     /// waiting for the next chunk or the read deadline.
     private var activeUploads = ActiveUploadCancellations()
-    private var userCancelled = false
 
     /// How long the sender waits for the user before we answer 500.
     private let decisionTimeout: TimeInterval = 60
@@ -308,16 +307,21 @@ final class LocalSendReceiveService: ObservableObject {
     /// claimed (upstream lets the sender retry the same file, so the slot is kept
     /// until the reaper or an explicit release).
     func noteUploadFailure(_ error: LocalSendReceiveError, file: LocalSendReceiveFile) {
+        guard ReceiveSessionPolicy.recordsFailure(
+            fileID: file.id, sessionFileIDs: Set(files.keys), sessionActive: sessionID != nil
+        ) else {
+            Logger.log("LocalSend receive: ignoring a failure for a session that is gone", category: .extensions)
+            return
+        }
         let fileName = file.name
         failedFileIDs.insert(file.id)
         // One failure path (a destination that cannot be written) returned without
         // clearing this, which left the progress card up forever and the failure
         // card invisible behind it.
         isReceiving = ReceiveSessionPolicy.isReceiving(fileIDs: Set(files.keys), failedFileIDs: failedFileIDs)
-        guard ReceiveSessionPolicy.recordsFailureCard(userCancelled: userCancelled) else {
+        guard ReceiveSessionPolicy.recordsFailureCard(userCancelled: uploadFlags.userCancelled) else {
             // The abort is what the user asked for; no failure card for it.
-            userCancelled = false
-            cancelRequested = false
+            _ = uploadFlags.consumeUserCancelled()
             return
         }
         let reason: String
@@ -351,8 +355,7 @@ final class LocalSendReceiveService: ObservableObject {
         // `userCancelled` set for the next transfer.
         guard ReceiveSessionPolicy.canCancel(isReceiving: isReceiving, hasSession: sessionID != nil) else { return }
         Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
-        cancelRequested = true
-        userCancelled = true
+        uploadFlags.requestCancel()
         activeUploads.cancelAll()
         isReceiving = false
         sessionReaperTask?.cancel()
@@ -394,7 +397,7 @@ final class LocalSendReceiveService: ObservableObject {
     /// An accepted session whose sender is already gone: the `200` could not be
     /// delivered, so there is nothing to wait for.
     func abandonUnreachableSession(sessionID: String) {
-        guard self.sessionID == sessionID else { return }
+        guard ReceiveSessionPolicy.isCurrentSession(self.sessionID, expected: sessionID) else { return }
         Logger.log("LocalSend receive: sender was gone before the accepted session started", category: .extensions)
         sessionReaperTask?.cancel()
         sessionReaperTask = nil
@@ -429,10 +432,9 @@ final class LocalSendReceiveService: ObservableObject {
     nonisolated func receiveUpload(file: LocalSendReceiveFile, body: any LocalSendHTTPBody) async -> LocalSendReceiveError? {
         await MainActor.run {
             self.isReceiving = true
-            self.cancelRequested = false
+            self.uploadFlags.beginUpload()
             // A cancel that arrived after the previous transfer finished must not
             // suppress this one's failure card (or shorten its slot window).
-            self.userCancelled = false
             self.failureText = nil
             self.receiveProgress = 0
             self.lastSessionActivity = Date()
@@ -462,7 +464,7 @@ final class LocalSendReceiveService: ObservableObject {
                     // Any byte counts as progress, including for a stream that
                     // announced no size.
                     self.lastSessionActivity = Date()
-                    return self.cancelRequested
+                    return self.uploadFlags.cancelRequested
                 }
                 if cancelled { throw LocalSendProtocolError.cancelled }
             }
