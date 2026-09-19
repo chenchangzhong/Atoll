@@ -298,7 +298,9 @@ final class LocalSendReceiveService: ObservableObject {
                     // A session can also end without a failure and without a last
                     // file: some files were stored and the rest never arrived. Say
                     // so, instead of collapsing the notch with no word about it.
-                    if self.failureText == nil { self.reportStoredFiles() }
+                    if ReceiveSessionPolicy.ending(storedFileCount: self.lastReceivedNames.count, hasFailure: self.failureText != nil) == .storedFiles {
+                        self.reportStoredFiles()
+                    }
                     Logger.log("LocalSend receive: session \(armed ?? "?") idle; releasing the slot", category: .extensions)
                     self.releaseSession()
                 }
@@ -432,7 +434,8 @@ final class LocalSendReceiveService: ObservableObject {
     /// failure instead, deliberately.
     private func reportStoredFiles() {
         let names = lastReceivedNames
-        guard !names.isEmpty else { return }
+        guard ReceiveSessionPolicy.ending(storedFileCount: names.count, hasFailure: failureText != nil) == .storedFiles
+        else { return }
         completionText = names.count == 1
             ? String(format: NSLocalizedString("Stored %@ in Downloads", comment: "LocalSend: a received file was stored"), names[0])
             : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
@@ -465,7 +468,9 @@ final class LocalSendReceiveService: ObservableObject {
             Logger.log("LocalSend receive: sender cancelled session \(activeSession)", category: .extensions)
             // Files that already arrived are still worth reporting: the sender
             // giving up is not the user's doing.
-            if failureText == nil { reportStoredFiles() }
+            if ReceiveSessionPolicy.ending(storedFileCount: lastReceivedNames.count, hasFailure: failureText != nil) == .storedFiles {
+                reportStoredFiles()
+            }
             sessionReaperTask?.cancel()
             sessionReaperTask = nil
             releaseSession()

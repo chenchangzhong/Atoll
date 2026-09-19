@@ -162,3 +162,29 @@ public extension ReceiveSessionPolicy {
         sessionID == expected
     }
 }
+
+/// What a session should say when it ends.
+///
+/// The endings were decided inline in four places in the service, and each one had
+/// its own guard. As a value they can be asserted: a session that stored something
+/// reports it, a session that failed reports the failure, and a session that stored
+/// nothing says nothing.
+public enum ReceiveEnding: Equatable {
+    /// Report the stored files (the service composes the text).
+    case storedFiles
+    /// Keep showing the failure that is already on screen.
+    case failure
+    /// Nothing worth saying.
+    case silent
+}
+
+public extension ReceiveSessionPolicy {
+    /// - Parameters:
+    ///   - storedFileCount: files already moved into ~/Downloads.
+    ///   - hasFailure: a failure card is currently up.
+    static func ending(storedFileCount: Int, hasFailure: Bool) -> ReceiveEnding {
+        if storedFileCount > 0 { return .storedFiles }
+        if hasFailure { return .failure }
+        return .silent
+    }
+}

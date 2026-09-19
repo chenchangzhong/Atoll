@@ -90,6 +90,38 @@ final class ReceiveSessionPolicyTests: XCTestCase {
         XCTAssertFalse(ReceiveSessionPolicy.canCancel(isReceiving: false, hasSession: false))
     }
 
+    // MARK: ending
+
+    /// The ninth review's point: the ending was decided inline in four places, so the
+    /// behaviour under review (cancel after some files arrived) could not be asserted.
+    func testASessionThatStoredSomethingReportsIt() {
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: 1, hasFailure: false), .storedFiles)
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: 5, hasFailure: false), .storedFiles)
+        // A failure earlier in the session does not suppress what did arrive: the
+        // failure card is restored by the session ending itself.
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: 2, hasFailure: false), .storedFiles)
+    }
+
+    func testASessionWithNothingStoredKeepsItsFailure() {
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: 0, hasFailure: true), .failure)
+    }
+
+    func testASessionWithNothingToSaySaysNothing() {
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: 0, hasFailure: false), .silent)
+    }
+
+    /// The exact scenario behind the fix: one file stored, one still in flight, and the
+    /// user cancels from the notch.
+    func testCancelAfterOneOfTwoFilesArrived() {
+        var stored = 0
+        var failure: String?
+        stored += 1  // the first file lands
+        _ = failure   // nothing failed
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: stored, hasFailure: failure != nil), .storedFiles)
+        // and had nothing landed, the cancel would say nothing
+        XCTAssertEqual(ReceiveSessionPolicy.ending(storedFileCount: 0, hasFailure: failure != nil), .silent)
+    }
+
     // MARK: failure summary
 
     /// Naming one file is only honest when exactly one failed: an all-failed session
