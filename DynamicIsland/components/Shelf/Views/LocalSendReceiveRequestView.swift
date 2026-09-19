@@ -21,10 +21,12 @@ struct LocalSendReceiveRequestView: View {
         Group {
             if let request = receive.pendingRequest {
                 requestCard(request)
+            } else if let failure = receive.failureText {
+                // Ahead of the progress card on purpose: a failure that left the
+                // receiving flag set used to hide behind "Receiving…" forever.
+                failureCard(failure)
             } else if receive.isReceiving {
                 progressCard
-            } else if let failure = receive.failureText {
-                failureCard(failure)
             } else if let completion = receive.completionText {
                 completionCard(completion)
             }

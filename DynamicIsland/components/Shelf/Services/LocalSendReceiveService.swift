@@ -291,6 +291,10 @@ final class LocalSendReceiveService: ObservableObject {
     /// claimed (upstream lets the sender retry the same file, so the slot is kept
     /// until the reaper or an explicit release).
     func noteUploadFailure(_ error: LocalSendReceiveError, fileName: String) {
+        // One failure path (a destination that cannot be written) returned without
+        // clearing this, which left the progress card up forever and the failure
+        // card invisible behind it.
+        isReceiving = false
         let reason: String
         switch error {
         case .unprocessable:
@@ -367,6 +371,7 @@ final class LocalSendReceiveService: ObservableObject {
     nonisolated func receiveUpload(file: LocalSendReceiveFile, body: any LocalSendHTTPBody) async -> LocalSendReceiveError? {
         await MainActor.run {
             self.isReceiving = true
+            self.failureText = nil
             self.receiveProgress = 0
             self.lastSessionActivity = Date()
             self.armSessionReaper()
