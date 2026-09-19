@@ -29,26 +29,43 @@ obvious from the wire format:
    and ~105 s — by a reaper, so a sender that walks away cannot wedge the app;
    progress (not elapsed time) is what keeps a transfer alive.
 2. **Per-file UUID tokens, bound to the sender's address.** `upload` is refused
-   (`403 Invalid token`) unless the session id, the file id, the token *and* the
-   address that prepared the session all match. The address is compared as the
+   (`403 Invalid token or IP address`) unless the session id, the file id, the
+   token *and* the address that prepared the session all match. The address is compared as the
    transport reports it (not parsed into IPv4), so an IPv6 peer is bound too.
-3. **The user decides, in Atoll's own notch.** `prepare-upload` publishes a
+3. **Every state has a way out.** A failure publishes the file name and the reason
+   and shows a card with a Release action — including for a transfer that was
+   accepted automatically, where the notch does not open by itself, so reopening it
+   during the retention window still explains what happened. That card is *not*
+   auto-cleared: it lives exactly as long as the session slot is claimed, so the
+   card and the window agree. An in-flight transfer can be cancelled from the
+   progress card, which stops the stream, removes the partial file and releases the
+   slot immediately; the sender is told the transfer failed, which is what
+   cancelling means here.
+4. **A failed upload keeps its slot for 30 s, not 90 s.** Upstream keeps such a
+   session indefinitely, but only because its sender retries *the same file with
+   the same token* — and even upstream only resets a checksum mismatch back to
+   pending (within an attempt limit); other failures are terminal for that file.
+   Atoll is deliberately more permissive and keeps any failure retryable for 30 s,
+   which is long enough for a retry that is already in flight and short enough that
+   the common "send it again" (a fresh `prepare-upload`) is not left staring at a
+   `409`.
+5. **The user decides, in Atoll's own notch.** `prepare-upload` publishes a
    pending request, and the request is answered `200` with the tokens only after
    the user accepts, `403` when declined, and `500` when the 60 s window passes
    with no answer — upstream's "dropped decision" semantics. The default is to
    ask; a setting can opt into accepting automatically.
-4. **Receive availability is gated on `dynamicShelf && quickShareProvider ==
+6. **Receive availability is gated on `dynamicShelf && quickShareProvider ==
    "LocalSend"`.** While that holds, the 53317 listener and the multicast
    discovery run from launch and are exempt from the idle teardown. There is no
    separate "receive" switch: the receive capability is considered part of using
    LocalSend as the share provider.
-5. **Transport security is the peer's choice, and we do not require one.** Atoll
+7. **Transport security is the peer's choice, and we do not require one.** Atoll
    announces `protocol: "http"`, so a peer that follows the announcement speaks
    plain HTTP. Against peers with encryption on, the *client* side presents a
    generated client certificate (mandatory since LocalSend 1.18) and trusts any
    peer certificate; the server side does not ask for one. Plain HTTP on a LAN is
    an accepted risk, not an oversight — see Consequences.
-6. **Connections are bounded by activity, not by a stopwatch.** Every read has a
+8. **Connections are bounded by activity, not by a stopwatch.** Every read has a
    30 s deadline — a sender that is really streaming delivers continuously, and a
    dropped network only becomes visible here when the silence is long enough,
    because a vanished peer sends no FIN — and a connection that has delivered less
@@ -58,9 +75,11 @@ obvious from the wire format:
    off a legitimate multi-gigabyte upload on a slow link. The other limits are
    four concurrent uploads (a fifth is answered `409 Too many uploads in
    progress`), 64 connections overall, and 8 GiB per file. `register`/`info` sit
-   outside the upload gate on purpose: a peer streaming a file must not be able to
-   make the Mac undiscoverable.
-7. **The device fingerprint is derived, not invented.** It is the SHA-256 of our
+   outside the upload gate on purpose, so a peer streaming a file cannot make the
+   Mac undiscoverable — the 64-connection ceiling can still be filled by a
+   deliberate flood on the same LAN, but that window is bounded (the throughput
+   floor closes such connections within ~135 s) rather than a leak.
+9. **The device fingerprint is derived, not invented.** It is the SHA-256 of our
    client certificate in DER form (uppercase hex), which is upstream's
    `fingerprint_from_cert_der` and therefore also what an encrypted peer pins when
    it answers an https announcement; a persisted random value is the fallback when
@@ -75,6 +94,9 @@ obvious from the wire format:
   trusts the local network and the user's click — the same trust upstream's app
   places in its own confirmation dialog. There is no allow-list, rate limit, or
   authentication.
+- **A transfer that fails says so and can be dismissed**, and a transfer in
+  progress can be cancelled; nothing in the receive flow ends without either
+  storing the file or telling the user.
 - **`~/Downloads` is the destination**, with `name (1).ext` de-duplication. A
   transfer is stored only if the announced SHA-256 matches (when one is announced)
   and, when a non-zero size was announced, the byte count matches it — up to 8 GiB.

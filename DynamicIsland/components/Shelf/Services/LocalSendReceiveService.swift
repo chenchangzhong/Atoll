@@ -100,7 +100,6 @@ final class LocalSendReceiveService: ObservableObject {
     /// Set when an upload fails. Without it the notch retracted silently while the
     /// session slot stayed claimed, and the next sender only got a 409.
     @Published private(set) var failureText: String?
-    private var clearFailureTask: Task<Void, Never>?
     /// Set while an upload should stop because the user asked it to.
     private var cancelRequested = false
     private var userCancelled = false
@@ -250,11 +249,11 @@ final class LocalSendReceiveService: ObservableObject {
         return .accepted(sessionID: id, tokens: tokens)
     }
 
-    /// Releases the session slot and the notch once the transfer has been idle
-    /// for `abandonedSessionTimeout` — the sender walked away, or the request was
-    /// accepted and no upload ever started. Progress keeps it alive, so a slow
-    /// multi-minute upload is not cut off mid-file (a plain per-session deadline
-    /// used to do exactly that).
+    /// Releases the session slot and the notch once the transfer has been idle for
+    /// the given timeout (default: an abandoned session) — the sender walked away,
+    /// or the request was accepted and no upload ever started. Progress keeps it
+    /// alive, so a slow multi-minute upload is not cut off mid-file (a plain
+    /// per-session deadline used to do exactly that).
     private func armSessionReaper(after timeout: TimeInterval? = nil) {
         sessionReaperTask?.cancel()
         let armed = sessionID
@@ -319,12 +318,10 @@ final class LocalSendReceiveService: ObservableObject {
             reason
         )
         armSessionReaper(after: failedSessionTimeout)
-        clearFailureTask?.cancel()
-        clearFailureTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 6_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run { self?.failureText = nil }
-        }
+        // Deliberately not auto-cleared: the session slot is still claimed, and the
+        // Release action is the way out (including for an automatically accepted
+        // transfer whose notch never opened). The text goes away when the session
+        // is released, when the user releases it, or when the next upload starts.
         Logger.log("LocalSend receive: \(fileName) failed — \(reason)", category: .extensions)
     }
 
@@ -332,6 +329,10 @@ final class LocalSendReceiveService: ObservableObject {
     /// stops, its temporary file is removed, the session is released and no failure
     /// card is shown for the abort the user asked for.
     func cancelActiveTransfer() {
+        // Only meaningful while something is actually being received; without this
+        // a cancel that arrives when nothing is running left the sticky
+        // `userCancelled` set for the next transfer.
+        guard isReceiving || sessionID != nil else { return }
         Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
         cancelRequested = true
         userCancelled = true
@@ -343,8 +344,6 @@ final class LocalSendReceiveService: ObservableObject {
 
     /// The user released a failed transfer instead of waiting for the reaper.
     func discardFailedTransfer() {
-        clearFailureTask?.cancel()
-        clearFailureTask = nil
         failureText = nil
         sessionReaperTask?.cancel()
         sessionReaperTask = nil
@@ -394,6 +393,9 @@ final class LocalSendReceiveService: ObservableObject {
         await MainActor.run {
             self.isReceiving = true
             self.cancelRequested = false
+            // A cancel that arrived after the previous transfer finished must not
+            // suppress this one's failure card (or shorten its slot window).
+            self.userCancelled = false
             self.failureText = nil
             self.receiveProgress = 0
             self.lastSessionActivity = Date()
