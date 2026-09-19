@@ -234,7 +234,7 @@ def case_discovery_survives_an_upload() -> None:
     name = versioned("smoke-busy.bin")
     status, session = prepare([file_spec(name, data)])
     if status != 200:
-        return record("register answers while an upload is in flight", False, f"prepare={status}")
+        return record("register/info answer while an upload is in flight", False, f"prepare={status}")
     sock = socket.create_connection((HOST, PORT), timeout=30)
     file_id = list(session["files"])[0]
     target = f"/api/localsend/v2/upload?sessionId={session['sessionId']}&fileId={file_id}&token={session['files'][file_id]}"
@@ -251,11 +251,14 @@ def case_discovery_survives_an_upload() -> None:
     sock.close()
     time.sleep(0.5)
     post("/api/localsend/v2/cancel")
-    os.path.exists(os.path.join(DOWNLOADS, name)) and os.remove(os.path.join(DOWNLOADS, name))
+    landed = os.path.join(DOWNLOADS, name)
+    left_behind = os.path.exists(landed)  # a half-sent upload must leave nothing
+    if left_behind:
+        os.remove(landed)
     record(
         "register/info answer while an upload is in flight",
-        reg_status == 200 and info_status == 200,
-        f"register={reg_status} info={info_status}",
+        reg_status == 200 and info_status == 200 and not left_behind,
+        f"register={reg_status} info={info_status} partial_file={left_behind}",
     )
 
 

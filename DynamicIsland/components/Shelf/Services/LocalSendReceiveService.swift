@@ -282,6 +282,21 @@ final class LocalSendReceiveService: ObservableObject {
                     guard self.sessionID == armed,
                           Date().timeIntervalSince(self.lastSessionActivity) >= idleTimeout
                     else { return }
+                    // A session can also end without a failure and without a last
+                    // file: some files were stored and the rest never arrived. Say
+                    // so, instead of collapsing the notch with no word about it.
+                    if self.failureText == nil, !self.lastReceivedNames.isEmpty {
+                        let names = self.lastReceivedNames
+                        self.completionText = names.count == 1
+                            ? String(format: NSLocalizedString("Stored %@ in Downloads", comment: "LocalSend: a received file was stored"), names[0])
+                            : String(format: NSLocalizedString("Stored %lld files in Downloads", comment: "LocalSend: several received files were stored"), names.count)
+                        self.clearCompletionTask?.cancel()
+                        self.clearCompletionTask = Task { [weak self] in
+                            try? await Task.sleep(nanoseconds: 3_000_000_000)
+                            guard !Task.isCancelled else { return }
+                            await MainActor.run { self?.completionText = nil }
+                        }
+                    }
                     Logger.log("LocalSend receive: session \(armed ?? "?") idle; releasing the slot", category: .extensions)
                     self.releaseSession()
                 }
