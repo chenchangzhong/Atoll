@@ -665,14 +665,11 @@ final class LocalSendHTTPConnection: @unchecked Sendable {
     /// has delivered almost nothing after two minutes is closed. (A 30-minute
     /// wall-clock cap used to do the latter and cut off an 8 GiB upload on a slow
     /// link.)
-    /// How long a single read may stay silent before the transfer is declared dead.
-    ///
-    /// A sender that is really streaming delivers bytes continuously, and a phone
-    /// whose network drops sends nothing at all (there is no FIN to react to), so
-    /// silence is the only signal this side gets. Chosen value: 10 s — feedback
-    /// arrives quickly at the cost of cutting off a sender that merely pauses for
-    /// longer than that mid-upload.
-    private static let readDeadline: TimeInterval = 10
+    /// How long a single read may stay silent. This is only a backstop: TCP
+    /// keepalive on the listener (see `startRegisterListenerIfNeeded`) is what
+    /// distinguishes a peer that is gone from one that is merely quiet, so this can
+    /// be generous without making the notch wait minutes for a dropped network.
+    private static let readDeadline: TimeInterval = 60
     private static let progressTick: TimeInterval = 15
     private static let progressGrace: TimeInterval = 120
     private static let minimumBytesPerSecond: Double = 256

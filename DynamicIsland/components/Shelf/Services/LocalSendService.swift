@@ -940,6 +940,19 @@ final class LocalSendService: NSObject, ObservableObject {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
             params.includePeerToPeer = true
+            // TCP keepalive is what tells a dead peer apart from a quiet one.
+            // Accepted connections inherit these options, and the kernel — not our
+            // read deadline — does the probing: a phone that switches apps or hits a
+            // Wi-Fi hiccup keeps ACKing its probes and its transfer survives, while
+            // one whose network dropped stops ACKing and the connection is reported
+            // dead in about idle + count × interval seconds.
+            // (macOS defaults — 2 hours idle, 8 probes — are useless here.)
+            let tcpOptions = NWProtocolTCP.Options()
+            tcpOptions.enableKeepalive = true
+            tcpOptions.keepaliveIdle = 5
+            tcpOptions.keepaliveCount = 3
+            tcpOptions.keepaliveInterval = 3
+            params.defaultProtocolStack.transportProtocol = tcpOptions
 
             let listener = try NWListener(
                 using: params,

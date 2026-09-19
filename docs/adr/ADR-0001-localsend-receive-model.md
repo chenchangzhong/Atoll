@@ -66,11 +66,11 @@ obvious from the wire format:
    generated client certificate (mandatory since LocalSend 1.18) and trusts any
    peer certificate; the server side does not ask for one. Plain HTTP on a LAN is
    an accepted risk, not an oversight — see Consequences.
-8. **Connections are bounded by activity, not by a stopwatch.** Every read has a
-   10 s deadline — a sender that is really streaming delivers continuously, and a
-   dropped network only becomes visible here when the silence is long enough,
-   because a vanished peer sends no FIN; a sender that pauses longer than that is
-   cut off, which is the accepted cost of fast feedback — and a connection that has delivered less
+8. **Connections are bounded by activity, not by a stopwatch.** Keepalive is enabled per connection (5 s idle, three 3 s probes) so a dead peer is
+   reported by the kernel in roughly 14 s, which is also what tells a gone phone
+   apart from one that merely stopped sending: a paused-but-connected sender keeps
+   ACKing its probes and its transfer survives. Every read additionally has a 60 s
+   deadline as a backstop, and a connection that has delivered less
    than 256 B/s after a two-minute grace period is closed — a trickle of one byte every 19 s satisfies
    a per-read deadline, so only a throughput floor can bound it. A wall-clock
    lifetime (30 minutes, as an earlier revision had) is simpler but wrong: it cuts
