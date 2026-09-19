@@ -346,10 +346,12 @@ final class LocalSendReceiveService: ObservableObject {
 
     /// Clears the single session slot and everything the notch derives from it.
     private func releaseSession() {
-        // Partial files are NOT deleted here: a body can still be streaming when the
-        // reaper releases a session (90 s of silence, while the read deadline allows
-        // 140 s), and unlinking underneath that writer turned a transfer that would
-        // have completed into a 500. `receiveUpload`'s own `defer` owns the file.
+        // A released session means nobody should still be reading a body for it, so
+        // any upload still streaming is torn down. Its `defer` then removes the
+        // partial file. Deleting the file from here instead would unlink it under a
+        // live writer (the reaper fires after 90 s of silence while the read deadline
+        // allows 140 s) and turn a transfer that would have completed into a 500.
+        activeUploads.cancelAll()
         failureText = nil
         lastFailureText = nil
         // A cancel belongs to the session it interrupted: leaving the flags set is
@@ -424,7 +426,6 @@ final class LocalSendReceiveService: ObservableObject {
         guard ReceiveSessionPolicy.canCancel(isReceiving: isReceiving, hasSession: sessionID != nil) else { return }
         Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
         uploadFlags.requestCancel()
-        activeUploads.cancelAll()
         isReceiving = false
         // The user asked to stop, but files that already arrived are still worth
         // saying out loud.

@@ -42,6 +42,9 @@ DOWNLOADS = os.path.expanduser("~/Downloads")
 PASS, FAIL = "PASS", "FAIL"
 results: list[tuple[str, str, str]] = []
 
+# Set by main(); the stale-sweep case relaunches the app to exercise the launch path.
+APP_PATH = ""
+
 
 # ---------------------------------------------------------------- app control
 
@@ -302,6 +305,77 @@ def case_discovery_survives_an_upload() -> None:
     )
 
 
+def case_release_cleans_the_partial() -> None:
+    """Cancelling while the body is still streaming must remove its partial file.
+
+    This is the only case that distinguishes the session-release cleanup from the
+    upload's own error path: the socket stays open, so nothing but the release can
+    delete the file. Before that cleanup existed the file survived until the read
+    deadline (140 s), which this asserts against.
+    """
+    data = bytes(range(256)) * 400
+    name = versioned("smoke-release.bin")
+    before = partial_files()
+    status, session = prepare([file_spec(name, data)])
+    if status != 200:
+        return record("cancelling a live upload removes its partial file", False, f"prepare={status}")
+    file_id = list(session["files"])[0]
+    target = f"/api/localsend/v2/upload?sessionId={session['sessionId']}&fileId={file_id}&token={session['files'][file_id]}"
+    sock = socket.create_connection((HOST, PORT), timeout=30)
+    sock.sendall(f"POST {target} HTTP/1.1\r\nHost: smoke\r\nTransfer-Encoding: chunked\r\n\r\n".encode())
+    sock.sendall(b"10000\r\n" + data[: len(data) // 2] + b"\r\n")  # half, keep the socket open
+    time.sleep(0.5)
+    in_flight = partial_files() - before
+    if not in_flight:
+        sock.close()
+        return record("cancelling a live upload removes its partial file", False, "no .part to observe")
+    post("/api/localsend/v2/cancel")  # a fresh connection; same sender address
+    deadline = time.time() + 5
+    remaining = partial_files() & in_flight
+    while remaining and time.time() < deadline:
+        time.sleep(0.5)
+        remaining = partial_files() & in_flight
+    sock.close()
+    for stray in remaining:
+        try:
+            os.remove(stray)
+        except OSError:
+            pass
+    record(
+        "cancelling a live upload removes its partial file",
+        not remaining,
+        f"observed={len(in_flight)} left_after_cancel={len(remaining)}",
+    )
+
+
+def case_stale_sweep() -> None:
+    """Only old partial files are swept at launch; a fresh one is left alone."""
+    import tempfile as _tempfile
+
+    directory = _tempfile.gettempdir()
+    stale = os.path.join(directory, f"atoll-localsend-smoke-stale-{uuid.uuid4().hex[:8]}.part")
+    fresh = os.path.join(directory, f"atoll-localsend-smoke-fresh-{uuid.uuid4().hex[:8]}.part")
+    for path in (stale, fresh):
+        with open(path, "wb") as handle:
+            handle.write(b"x")
+    seven_hours_ago = time.time() - 7 * 60 * 60
+    os.utime(stale, (seven_hours_ago, seven_hours_ago))
+    restart_app(APP_PATH)  # the sweep runs during the background warm-up
+    time.sleep(1)
+    stale_gone = not os.path.exists(stale)
+    fresh_kept = os.path.exists(fresh)
+    for path in (stale, fresh):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    record(
+        "the launch sweep removes only stale partial files",
+        stale_gone and fresh_kept,
+        f"stale_removed={stale_gone} fresh_kept={fresh_kept}",
+    )
+
+
 def case_empty_files() -> None:
     status, _ = post("/api/localsend/v2/prepare-upload", {"info": {"alias": "smoke", "fingerprint": "smoke"}, "files": {}})
     record("an empty file map is a bad request", status == 400, f"status={status}")
@@ -422,6 +496,8 @@ def main() -> int:
     args = parser.parse_args()
 
     app = args.app or find_app()
+    global APP_PATH
+    APP_PATH = app
     print(f"app: {app}")
     previous = subprocess.run(["defaults", "read", DOMAIN, SETTING], capture_output=True, text=True).stdout.strip()
 
@@ -438,6 +514,8 @@ def main() -> int:
                 case_overflow_frames,
                 case_empty_files,
                 case_discovery_survives_an_upload,
+                case_release_cleans_the_partial,
+                case_stale_sweep,
                 case_multi_file_with_one_failure,
             ],
         )
