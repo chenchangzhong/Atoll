@@ -98,6 +98,7 @@ struct LocalSendReceiveRequestView: View {
                 Text("\(Int(receive.receiveProgress * 100))%")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.secondary)
+                capsuleButton("Cancel", filled: false) { receive.cancelActiveTransfer() }
             }
             ProgressView(value: min(max(receive.receiveProgress, 0), 1))
                 .progressViewStyle(.linear)

@@ -101,6 +101,9 @@ final class LocalSendReceiveService: ObservableObject {
     /// session slot stayed claimed, and the next sender only got a 409.
     @Published private(set) var failureText: String?
     private var clearFailureTask: Task<Void, Never>?
+    /// Set while an upload should stop because the user asked it to.
+    private var cancelRequested = false
+    private var userCancelled = false
 
     /// How long the sender waits for the user before we answer 500.
     private let decisionTimeout: TimeInterval = 60
@@ -295,6 +298,12 @@ final class LocalSendReceiveService: ObservableObject {
         // clearing this, which left the progress card up forever and the failure
         // card invisible behind it.
         isReceiving = false
+        if userCancelled {
+            // The abort is what the user asked for; no failure card for it.
+            userCancelled = false
+            cancelRequested = false
+            return
+        }
         let reason: String
         switch error {
         case .unprocessable:
@@ -317,6 +326,19 @@ final class LocalSendReceiveService: ObservableObject {
             await MainActor.run { self?.failureText = nil }
         }
         Logger.log("LocalSend receive: \(fileName) failed — \(reason)", category: .extensions)
+    }
+
+    /// The user cancelled an in-flight transfer from the notch: the streaming loop
+    /// stops, its temporary file is removed, the session is released and no failure
+    /// card is shown for the abort the user asked for.
+    func cancelActiveTransfer() {
+        Logger.log("LocalSend receive: cancelled by the user", category: .extensions)
+        cancelRequested = true
+        userCancelled = true
+        isReceiving = false
+        sessionReaperTask?.cancel()
+        sessionReaperTask = nil
+        releaseSession()
     }
 
     /// The user released a failed transfer instead of waiting for the reaper.
@@ -371,6 +393,7 @@ final class LocalSendReceiveService: ObservableObject {
     nonisolated func receiveUpload(file: LocalSendReceiveFile, body: any LocalSendHTTPBody) async -> LocalSendReceiveError? {
         await MainActor.run {
             self.isReceiving = true
+            self.cancelRequested = false
             self.failureText = nil
             self.receiveProgress = 0
             self.lastSessionActivity = Date()
@@ -395,12 +418,14 @@ final class LocalSendReceiveService: ObservableObject {
                 hasher.update(data: chunk)
                 written += chunk.count
                 let fraction = file.size > 0 ? min(1, Double(written) / Double(file.size)) : 0
-                await MainActor.run {
+                let cancelled = await MainActor.run { () -> Bool in
                     self.receiveProgress = fraction
                     // Any byte counts as progress, including for a stream that
                     // announced no size.
                     self.lastSessionActivity = Date()
+                    return self.cancelRequested
                 }
+                if cancelled { throw LocalSendProtocolError.cancelled }
             }
         } catch LocalSendProtocolError.tooLarge {
             try? FileManager.default.removeItem(at: temporary)

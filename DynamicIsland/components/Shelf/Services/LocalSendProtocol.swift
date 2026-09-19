@@ -22,6 +22,7 @@ enum LocalSendProtocolError: Error, Equatable {
     case truncatedBody
     case malformedChunk
     case tooLarge
+    case cancelled
 }
 
 enum LocalSendProtocol {
