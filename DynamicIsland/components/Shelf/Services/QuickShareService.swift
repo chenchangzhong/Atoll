@@ -174,7 +174,13 @@ class QuickShareService: ObservableObject {
     
     // MARK: - File Picker
     @MainActor
-    func showFilePicker(for provider: QuickShareProvider, from view: NSView?) async {
+    /// Shows the system file picker. When `onFilesChosen` is provided, the
+    /// selected URLs are handed back to the caller instead of being shared
+    /// directly (used by the LocalSend flow, which must show the device
+    /// picker first, exactly like the drag-and-drop path).
+    func showFilePicker(for provider: QuickShareProvider,
+                        from view: NSView?,
+                        onFilesChosen: (([URL]) -> Void)? = nil) async {
         guard !isPickerOpen else {
             print("⚠️ QuickShareService: File picker already open")
             return
@@ -200,8 +206,18 @@ class QuickShareService: ObservableObject {
             }
 
             if response == .OK && !panel.urls.isEmpty {
-                Task {
-                    await self?.shareFilesOrText(panel.urls, using: provider, from: view)
+                if let onFilesChosen {
+                    Task { @MainActor in
+                        defer {
+                            self?.isPickerOpen = false
+                            SharingStateManager.shared.endInteraction()
+                        }
+                        onFilesChosen(panel.urls)
+                    }
+                } else {
+                    Task {
+                        await self?.shareFilesOrText(panel.urls, using: provider, from: view)
+                    }
                 }
             }
         }

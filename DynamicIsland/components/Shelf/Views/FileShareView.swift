@@ -38,6 +38,7 @@ struct FileShareView: View {
     @State private var interactionNonce: UUID = .init()
     @State private var isProcessing = false
     @State private var pendingDropProviders: [NSItemProvider]?
+    @State private var pendingPickerURLs: [URL]?
     @State private var showLocalSendPicker = false
     
     private var selectedProvider: QuickShareProvider {
@@ -295,11 +296,20 @@ struct FileShareView: View {
                                 await handleDrop(providers)
                                 pendingDropProviders = nil
                             }
+                        } else if let urls = pendingPickerURLs {
+                            // Click flow: file already chosen, now send to the
+                            // selected device.
+                            pendingPickerURLs = nil
+                            Task {
+                                await sharePickedFiles(urls)
+                                showLocalSendPicker = false
+                            }
                         }
                     },
                     onDismiss: {
                         showLocalSendPicker = false
                         pendingDropProviders = nil
+                        pendingPickerURLs = nil
                     }
                 )
             } else {
@@ -317,7 +327,27 @@ struct FileShareView: View {
     }
     
     private func handleClick() async {
-        await quickShare.showFilePicker(for: selectedProvider, from: hostView)
+        // LocalSend must show the device picker after the file is chosen
+        // (same flow as drag-and-drop), so hand the files back instead of
+        // sharing them directly.
+        let needsDevicePicker = selectedProvider.id == "LocalSend"
+        await quickShare.showFilePicker(for: selectedProvider, from: hostView) { urls in
+            if needsDevicePicker {
+                // Kick off discovery now so the device panel has results
+                LocalSendService.shared.startDiscovery()
+                LocalSendService.shared.refreshDeviceScan()
+                pendingPickerURLs = urls
+                showLocalSendPicker = true
+            } else {
+                Task { await sharePickedFiles(urls) }
+            }
+        }
+    }
+
+    private func sharePickedFiles(_ urls: [URL]) async {
+        isProcessing = true
+        defer { isProcessing = false }
+        await quickShare.shareFilesOrText(urls, using: selectedProvider, from: hostView)
     }
 }
 

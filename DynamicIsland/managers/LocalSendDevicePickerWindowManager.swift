@@ -329,6 +329,10 @@ struct LocalSendDevicePickerView: View {
                     }
                 }
             }
+            // Keep a top inset even with the hover scale-up: otherwise the
+            // 1.02 scale of the first row's card crosses the scroll viewport
+            // edge and its top border is clipped.
+            .padding(.top, 8)
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }

@@ -843,6 +843,22 @@ final class LocalSendService: NSObject, ObservableObject {
             await finishSending(startedAt: startedAt, success: false)
             throw error
         } catch {
+            // HTTPS peers that asked for a client certificate answer a declined
+            // transfer with HTTP 403, but CFNetwork swallows that response and
+            // cancels the task with NSURLErrorClientCertificateRequired (-1206)
+            // instead. That combination means the recipient rejected the
+            // transfer, so show the notch rejection state rather than a cryptic
+            // client-certificate error (and nothing to alert on).
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain,
+               nsError.code == URLError.Code.clientCertificateRequired.rawValue,
+               selectedTarget?.https == true {
+                let rejectedID = selectedTarget?.id ?? selectedDeviceID
+                rejectedDeviceIDs.insert(rejectedID)
+                transferState = .rejected(deviceID: rejectedID)
+                await finishSending(startedAt: startedAt, success: false)
+                return
+            }
             // Callers alert on the thrown error, so hand them the mapped text
             // rather than the raw "network connection was interrupted".
             let mapped = transferFailureMessage(for: error, target: selectedTarget)
